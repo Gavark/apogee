@@ -1,0 +1,41 @@
+# Apogée: self-hosted deployment.
+#
+#   cp .env.example .env   # then edit ORIGIN (and optionally ADMIN_*)
+#   mkdir -p data && chown 1000:1000 data   # the container runs as user "node"
+#   docker compose up -d
+#
+# The app listens on 127.0.0.1:3000. Put a reverse proxy in front (see
+# Caddyfile.example): without a proxy declaring the public URL in ORIGIN,
+# form submissions are rejected with a 403.
+
+services:
+  apogee:
+    image: ghcr.io/gavark/apogee:latest
+    # Pour construire l'image localement au lieu de la tirer depuis GHCR :
+    # build: .
+    container_name: apogee
+    restart: unless-stopped
+    # Loopback only: your reverse proxy connects via 127.0.0.1:3000. Never
+    # publish this plain-HTTP port to the public internet.
+    ports:
+      - "127.0.0.1:3000:3000"
+    environment:
+      - ORIGIN=${ORIGIN:-}
+      - ADMIN_EMAIL=${ADMIN_EMAIL:-}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-}
+      - HOUSEHOLD_NAME=${HOUSEHOLD_NAME:-Ma cave}
+      - TZ=${TZ:-Europe/Paris}
+      - PROTOCOL_HEADER=x-forwarded-proto
+      - HOST_HEADER=x-forwarded-host
+      # Behind the reverse proxy on 127.0.0.1: take the client IP from the last
+      # X-Forwarded-For entry (the one Caddy appends). Remove both lines if the
+      # container is exposed directly, without a reverse proxy.
+      - ADDRESS_HEADER=x-forwarded-for
+      - XFF_DEPTH=1
+    volumes:
+      - ./data:/data
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://127.0.0.1:3000/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3

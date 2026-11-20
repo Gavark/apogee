@@ -1,0 +1,52 @@
+name: Proposer une fonctionnalité
+description: Suggérer une nouvelle capacité ou l'amélioration d'une existante.
+title: "[feature] "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Merci pour la suggestion. Plus le cas d'usage est clair, plus il est facile de le prioriser : décrivez d'abord le *problème* à résoudre avant de proposer une solution.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Quel problème cherchez-vous à résoudre ?
+      description: La situation côté utilisateur, pas l'implémentation envisagée.
+      placeholder: "ex. Je voudrais savoir quelles bouteilles arrivent à leur apogée sans fouiller toute la cave."
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Qu'avez-vous en tête ?
+      description: Une esquisse de la fonctionnalité. Pas besoin d'une spécification.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives envisagées
+      description: Contournements existants, autres outils qui le font, etc.
+
+  - type: dropdown
+    id: scope
+    attributes:
+      label: Qui en bénéficierait ?
+      options:
+        - "Juste moi"
+        - "La plupart des utilisateurs d'Apogée"
+        - "Un type de déploiement précis (auto-hébergé sur RPi, NAS, etc.)"
+        - "Je ne sais pas"
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Avant d'envoyer
+      options:
+        - label: J'ai cherché dans les issues existantes et je n'ai pas trouvé de doublon.
+          required: true

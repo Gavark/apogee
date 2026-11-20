@@ -1,0 +1,201 @@
+/**
+ * Apogée design tokens. Colours are defined here and nowhere else.
+ *
+ * Identity: a cellar, not a wine label. Neutrals are limestone greys tinted
+ * toward bottle-glass green (one hue family, used everywhere); the single
+ * accent is that bottle green. Phase colours are semantic (time passing:
+ * slate for "wait", greens for "ready/peak", amber for "soon", brick for
+ * "now or never") and every badge also carries an icon, so colour is never
+ * the only cue. Dark mode is a first-class theme: the app is read in a dimly
+ * lit cellar, so it avoids pure black and keeps text at AA or better
+ * (tests/lib/contrast.test.ts checks every pair the components use).
+ *
+ * Geist is self-hosted via @fontsource-variable/geist: Vite bundles the woff2
+ * files, so they are served from the same origin (CSP 'self' only).
+ */
+@import '@fontsource-variable/geist/wght.css';
+
+:root {
+  /* Surfaces */
+  --c-bg-app: #EDF0EC;
+  --c-bg-card: #F9FAF8;
+  --c-bg-sunken: #E2E7E2;
+  --c-border: #D2D9D3;
+  --c-border-strong: #87938B;
+
+  /* Text */
+  --c-text: #17201A;
+  --c-text-muted: #505B54;
+
+  /* Accent: bottle green */
+  --c-accent: #2F6249;
+  --c-link: #2B5B43;
+  --c-fill: #2F6249;
+  --c-fill-hover: #244D39;
+  --c-on-fill: #F4F7F3;
+  --c-focus-ring: #6FA587;
+  --c-danger: #A53A2B;
+
+  /* Toast: an inverted slab so it reads over any page content */
+  --c-toast-bg: #1E2721;
+  --c-toast-text: #EEF2EE;
+  --c-toast-action: #9DD2B2;
+
+  /* Scrim behind the bottom sheet */
+  --c-scrim: #0E1310;
+
+  /* Phases: -bg/-fg are the badge pill, -mark is the timeline segment */
+  --c-phase-unknown-bg: #E1E5E1;
+  --c-phase-unknown-fg: #47524B;
+  --c-phase-too-young-bg: #DFE6EE;
+  --c-phase-too-young-fg: #2E4862;
+  --c-phase-too-young-mark: #A9B9C9;
+  --c-phase-ready-bg: #D8EADD;
+  --c-phase-ready-fg: #22553A;
+  --c-phase-ready-mark: #5E9A77;
+  --c-phase-peak-bg: #2F6249;
+  --c-phase-peak-fg: #F4F7F3;
+  --c-phase-peak-mark: #2F6249;
+  --c-phase-last-call-bg: #F4E4C8;
+  --c-phase-last-call-fg: #6E4309;
+  --c-phase-last-call-mark: #B57A1E;
+  --c-phase-past-bg: #F3DCD6;
+  --c-phase-past-fg: #8A2D21;
+
+  /* Shadow tint (green-black, never pure black) */
+  --c-shadow: #17201A;
+
+  /* Typography: 16px base for low-light legibility */
+  --font-sans: 'Geist Variable', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --fs-xs: 0.8125rem;  /* 13 - badges, captions */
+  --fs-sm: 0.9375rem;  /* 15 - secondary text, labels */
+  --fs-base: 1rem;     /* 16 - body, inputs (no iOS zoom) */
+  --fs-lg: 1.125rem;   /* 18 - list titles */
+  --fs-xl: 1.375rem;   /* 22 - section titles */
+  --fs-2xl: 1.75rem;   /* 28 - page titles */
+  --fw-regular: 420;
+  --fw-medium: 520;
+  --fw-semibold: 620;
+  --fw-bold: 700;
+  --lh-tight: 1.2;
+  --lh-body: 1.5;
+
+  /* Spacing: 4-pt grid */
+  --s-1: 4px;
+  --s-2: 8px;
+  --s-3: 12px;
+  --s-4: 16px;
+  --s-5: 20px;
+  --s-6: 24px;
+  --s-7: 32px;
+  --s-8: 48px;
+
+  /* Touch: every tappable control is at least this tall */
+  --tap: 48px;
+  --nav-h: 64px;
+  --page-max: 640px;
+
+  /* Radius rule: controls 12, cards and sheet 18, badges and toggles pill */
+  --r-control: 12px;
+  --r-card: 18px;
+  --r-pill: 999px;
+
+  /* Elevation (tinted with --c-shadow) */
+  --shadow-sm: 0 1px 2px color-mix(in srgb, var(--c-shadow) 8%, transparent);
+  --shadow-md: 0 6px 20px color-mix(in srgb, var(--c-shadow) 12%, transparent);
+  --shadow-lg: 0 16px 40px color-mix(in srgb, var(--c-shadow) 18%, transparent);
+
+  /* Motion: feedback and state changes only */
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --dur-fast: 120ms;
+  --dur-base: 220ms;
+
+  /* Layers */
+  --z-nav: 40;
+  --z-sheet: 60;
+  --z-toast: 70;
+
+  color-scheme: light;
+}
+
+/* Dark mode = OS prefers dark AND no explicit "light" override */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --c-bg-app: #0F1411;
+    --c-bg-card: #171E19;
+    --c-bg-sunken: #0B0F0C;
+    --c-border: #29332C;
+    --c-border-strong: #6A776E;
+    --c-text: #E3E9E3;
+    --c-text-muted: #9DA9A0;
+    --c-accent: #8CC4A2;
+    --c-link: #8CC4A2;
+    --c-fill: #8CC4A2;
+    --c-fill-hover: #A3D3B5;
+    --c-on-fill: #0E1A12;
+    --c-focus-ring: #5D9A77;
+    --c-danger: #EE8E7D;
+    --c-toast-bg: #E3E9E3;
+    --c-toast-text: #141B16;
+    --c-toast-action: #22553A;
+    --c-scrim: #000805;
+    --c-phase-unknown-bg: #232B25;
+    --c-phase-unknown-fg: #B2BCB4;
+    --c-phase-too-young-bg: #1C2733;
+    --c-phase-too-young-fg: #A9C2DB;
+    --c-phase-too-young-mark: #4E6378;
+    --c-phase-ready-bg: #1B3124;
+    --c-phase-ready-fg: #9FD2B1;
+    --c-phase-ready-mark: #4F8A67;
+    --c-phase-peak-bg: #8CC4A2;
+    --c-phase-peak-fg: #0E1A12;
+    --c-phase-peak-mark: #8CC4A2;
+    --c-phase-last-call-bg: #362A14;
+    --c-phase-last-call-fg: #EBC47F;
+    --c-phase-last-call-mark: #C9973F;
+    --c-phase-past-bg: #3A1E19;
+    --c-phase-past-fg: #F2A293;
+    --c-shadow: #000805;
+    color-scheme: dark;
+  }
+}
+
+/* Explicit dark override (whatever the OS says) */
+:root[data-theme="dark"] {
+  --c-bg-app: #0F1411;
+  --c-bg-card: #171E19;
+  --c-bg-sunken: #0B0F0C;
+  --c-border: #29332C;
+  --c-border-strong: #6A776E;
+  --c-text: #E3E9E3;
+  --c-text-muted: #9DA9A0;
+  --c-accent: #8CC4A2;
+  --c-link: #8CC4A2;
+  --c-fill: #8CC4A2;
+  --c-fill-hover: #A3D3B5;
+  --c-on-fill: #0E1A12;
+  --c-focus-ring: #5D9A77;
+  --c-danger: #EE8E7D;
+  --c-toast-bg: #E3E9E3;
+  --c-toast-text: #141B16;
+  --c-toast-action: #22553A;
+  --c-scrim: #000805;
+  --c-phase-unknown-bg: #232B25;
+  --c-phase-unknown-fg: #B2BCB4;
+  --c-phase-too-young-bg: #1C2733;
+  --c-phase-too-young-fg: #A9C2DB;
+  --c-phase-too-young-mark: #4E6378;
+  --c-phase-ready-bg: #1B3124;
+  --c-phase-ready-fg: #9FD2B1;
+  --c-phase-ready-mark: #4F8A67;
+  --c-phase-peak-bg: #8CC4A2;
+  --c-phase-peak-fg: #0E1A12;
+  --c-phase-peak-mark: #8CC4A2;
+  --c-phase-last-call-bg: #362A14;
+  --c-phase-last-call-fg: #EBC47F;
+  --c-phase-last-call-mark: #C9973F;
+  --c-phase-past-bg: #3A1E19;
+  --c-phase-past-fg: #F2A293;
+  --c-shadow: #000805;
+  color-scheme: dark;
+}
