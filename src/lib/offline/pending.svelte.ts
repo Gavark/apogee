@@ -192,8 +192,11 @@ export function requestBackgroundSync(): void {
     .catch(() => {});
 }
 
-// Every sync that runs in this tab feeds the results and the overlay, whoever started it.
-onSyncOutcome((userId, out) => {
+/**
+ * Every sync feeds the results and the overlay, whoever ran it: this tab (onSyncOutcome) or the
+ * service worker's Background Sync (its `sync-outcome` message, see startSyncLoop).
+ */
+function handleOutcome(userId: number, out: SyncOutcome): void {
   if (userId !== owner) return; // not the state on screen
   applyResults(
     out.results,
@@ -216,7 +219,19 @@ onSyncOutcome((userId, out) => {
   const othersDropped = out.dropped.filter((o) => !claimed.has(o.opId));
   const changed = others.length > 0 || othersDropped.length > 0 || undone.size > 0;
   settling = settling.then(() => afterSync(userId, others, othersDropped, inverses, changed)).catch(() => {});
-});
+}
+
+onSyncOutcome(handleOutcome);
+
+/** A `{ type: 'sync-outcome' }` message from the service worker, or null for anything else. */
+function swOutcome(data: unknown): { userId: number; outcome: SyncOutcome } | null {
+  if (!data || typeof data !== 'object') return null;
+  const d = data as { type?: unknown; userId?: unknown; outcome?: Partial<SyncOutcome> | null };
+  const o = d.outcome;
+  if (d.type !== 'sync-outcome' || typeof d.userId !== 'number' || !o) return null;
+  if (!Array.isArray(o.results) || !Array.isArray(o.dropped) || typeof o.status !== 'string') return null;
+  return { userId: d.userId, outcome: o as SyncOutcome };
+}
 
 /**
  * Queues and sends ops on the user's behalf: inverses of gestures undone while uncertain, or such
@@ -298,6 +313,13 @@ export function startSyncLoop(userId: number): () => void {
   const onVisible = () => {
     if (document.visibilityState === 'visible') run();
   };
+  // Results of the service worker's Background Sync (another user's are ignored by handleOutcome).
+  const sw = 'serviceWorker' in navigator ? navigator.serviceWorker : undefined;
+  const onMessage = (e: MessageEvent) => {
+    const msg = swOutcome(e.data);
+    if (msg) handleOutcome(msg.userId, msg.outcome);
+  };
+  sw?.addEventListener('message', onMessage);
   window.addEventListener('online', run);
   document.addEventListener('visibilitychange', onVisible);
   const timer = setInterval(() => {
@@ -311,6 +333,7 @@ export function startSyncLoop(userId: number): () => void {
     })
     .catch(() => {});
   return () => {
+    sw?.removeEventListener('message', onMessage);
     window.removeEventListener('online', run);
     document.removeEventListener('visibilitychange', onVisible);
     clearInterval(timer);

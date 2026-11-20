@@ -12,22 +12,65 @@
   import Card from '$lib/components/Card.svelte';
   import Field from '$lib/components/Field.svelte';
   import LocaleSwitcher from '$lib/components/LocaleSwitcher.svelte';
+  import Sheet from '$lib/components/Sheet.svelte';
   import ThemeToggle from '$lib/components/ThemeToggle.svelte';
   import { formatDate, formatDateTime } from '$lib/format';
   import { unsubscribeThisDevice } from '$lib/push-client';
+  import { clearQueue, countQueued } from '$lib/offline/queue';
+  import { leaveActiveUser } from '$lib/offline/session';
+  import { syncNow } from '$lib/offline/sync';
 
   let { data, form } = $props();
   const errors = $derived((form?.errors ?? {}) as Record<string, string | undefined>);
 
-  // Drop this browser's push subscription first (best effort, short timeout), then log out.
+  let logoutForm: HTMLFormElement | undefined = $state();
+  /** Gestures still queued in this browser: logging out would lose them. */
+  let unsynced = $state(0);
+
+  async function queuedCount(userId: number): Promise<number> {
+    try {
+      let n = await countQueued(userId);
+      if (n > 0 && navigator.onLine) {
+        await syncNow(userId); // one last try before warning
+        n = await countQueued(userId);
+      }
+      return n;
+    } catch {
+      return 0; // no IndexedDB here: nothing can be queued
+    }
+  }
+
   async function logout(e: SubmitEvent) {
     e.preventDefault();
-    const form = e.currentTarget as HTMLFormElement;
+    const userId = data.user?.id;
+    if (typeof userId === 'number') {
+      const n = await queuedCount(userId);
+      if (n > 0) {
+        unsynced = n;
+        return;
+      }
+    }
+    await leave();
+  }
+
+  async function logoutAnyway() {
+    const userId = data.user?.id;
+    if (typeof userId === 'number') await clearQueue(userId).catch(() => {});
+    unsynced = 0;
+    await leave();
+  }
+
+  // Drop the offline copies and this browser's push subscription (best effort, short timeout), then log out.
+  let leaving = false;
+  async function leave() {
+    if (leaving) return;
+    leaving = true;
+    await leaveActiveUser().catch(() => {});
     await unsubscribeThisDevice({
       serviceWorker: 'serviceWorker' in navigator ? navigator.serviceWorker : undefined,
       fetch
     });
-    form.submit();
+    logoutForm?.submit();
   }
 </script>
 
@@ -153,7 +196,7 @@
     </ul>
   </section>
 
-  <form method="POST" action="/logout" onsubmit={logout}>
+  <form method="POST" action="/logout" onsubmit={logout} bind:this={logoutForm}>
     <Button type="submit" variant="secondary" block>
       <SignOut size={18} aria-hidden="true" />
       {m.account_logout()}
@@ -161,12 +204,21 @@
   </form>
 </div>
 
+<Sheet open={unsynced > 0} onclose={() => (unsynced = 0)} title={m.logout_unsynced_title()}>
+  <p>{m.logout_unsynced_body({ count: unsynced })}</p>
+  <div class="sheet-actions">
+    <Button variant="danger" block onclick={logoutAnyway}>{m.logout_anyway()}</Button>
+    <Button variant="ghost" block onclick={() => (unsynced = 0)}>{m.logout_stay()}</Button>
+  </div>
+</Sheet>
+
 <BottomNav />
 
 <style>
   .stack { display: flex; flex-direction: column; gap: var(--s-6); margin-top: var(--s-5); }
   .form { display: grid; gap: var(--s-4); }
   .success { color: var(--c-link); font-weight: var(--fw-medium); }
+  .sheet-actions { display: grid; gap: var(--s-3); }
 
   .nav-card {
     display: flex;

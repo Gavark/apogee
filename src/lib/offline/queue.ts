@@ -1,10 +1,15 @@
 // Offline queue of stock operations, persisted in IndexedDB. Framework-free: the service worker imports it.
-import type { StockOp } from '$lib/server/stock';
+import type { StockOp } from '$lib/stock-ops';
 
 export type QueuedOp = { op: StockOp; userId: number; queuedAt: number; attempts: number };
 
 const DB_NAME = 'apogee-offline';
+/** 2: adds the `meta` store (the active user). */
+const DB_VERSION = 2;
 const STORE = 'ops';
+/** Small key/value store: `activeUser` tells the service worker whose queue to send. */
+const META = 'meta';
+const ACTIVE_USER = 'activeUser';
 
 type Stored = QueuedOp & { seq: number };
 
@@ -18,10 +23,15 @@ export function _resetForTests(): void {
 
 function openDb(): Promise<IDBDatabase> {
   dbPromise ??= new Promise((resolve, reject) => {
-    const req = indexedDB.open(DB_NAME, 1);
+    const req = indexedDB.open(DB_NAME, DB_VERSION);
     req.onupgradeneeded = () => {
-      const store = req.result.createObjectStore(STORE, { keyPath: 'op.opId' });
-      store.createIndex('userId', 'userId');
+      // From any older version: create only what is missing, so queued ops survive the upgrade.
+      const db = req.result;
+      if (!db.objectStoreNames.contains(STORE)) {
+        const store = db.createObjectStore(STORE, { keyPath: 'op.opId' });
+        store.createIndex('userId', 'userId');
+      }
+      if (!db.objectStoreNames.contains(META)) db.createObjectStore(META);
     };
     req.onsuccess = () => {
       const db = req.result;
@@ -50,16 +60,20 @@ const wrap = <T>(req: IDBRequest<T>) =>
     req.onerror = () => reject(req.error);
   });
 
-async function tx<T>(mode: IDBTransactionMode, fn: (store: IDBObjectStore) => Promise<T>): Promise<T> {
+async function tx<T>(
+  mode: IDBTransactionMode,
+  fn: (store: IDBObjectStore) => Promise<T>,
+  storeName: string = STORE
+): Promise<T> {
   let db = await openDb();
   let t: IDBTransaction;
   try {
-    t = db.transaction(STORE, mode);
+    t = db.transaction(storeName, mode);
   } catch (e) {
     if (!(e instanceof DOMException && e.name === 'InvalidStateError')) throw e;
     dbPromise = null; // dead connection: reopen once
     db = await openDb();
-    t = db.transaction(STORE, mode);
+    t = db.transaction(storeName, mode);
   }
   const done = new Promise<void>((resolve, reject) => {
     t.oncomplete = () => resolve();
@@ -67,7 +81,7 @@ async function tx<T>(mode: IDBTransactionMode, fn: (store: IDBObjectStore) => Pr
     t.onabort = () => reject(t.error);
   });
   done.catch(() => {}); // never an unhandled rejection; the fn error (or done below) is what surfaces
-  const result = await fn(t.objectStore(STORE));
+  const result = await fn(t.objectStore(storeName));
   await done;
   return result;
 }
@@ -120,4 +134,30 @@ export function clearQueue(userId?: number): Promise<void> {
     const keys = await wrap(store.index('userId').getAllKeys(userId));
     await Promise.all(keys.map((k) => wrap(store.delete(k))));
   });
+}
+
+/**
+ * Records the logged-in user of this browser (null after logout), so the service worker's
+ * Background Sync sends that user's queue and nobody else's.
+ */
+export function setActiveUser(userId: number | null): Promise<void> {
+  return tx(
+    'readwrite',
+    async (store) => {
+      if (userId === null) await wrap(store.delete(ACTIVE_USER));
+      else await wrap(store.put(userId, ACTIVE_USER));
+    },
+    META
+  );
+}
+
+export function getActiveUser(): Promise<number | null> {
+  return tx(
+    'readonly',
+    async (store) => {
+      const v: unknown = await wrap(store.get(ACTIVE_USER));
+      return typeof v === 'number' && Number.isInteger(v) ? v : null;
+    },
+    META
+  );
 }

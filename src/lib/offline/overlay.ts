@@ -1,5 +1,5 @@
 // Pure optimistic overlay: applies pending stock ops to a displayed row. Framework-free.
-import type { StockOp } from '$lib/server/stock';
+import type { StockOp } from '$lib/stock-ops';
 
 type Lot = { lotId: number; quantity: number; locationId?: number; position?: string };
 

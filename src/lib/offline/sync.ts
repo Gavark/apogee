@@ -1,6 +1,6 @@
 // Sends the offline queue to the server. Framework-free (no $app/*, no runes): the service worker imports it.
 import { bumpAttempts, listQueued, removeQueued } from './queue';
-import type { OpResult, StockOp } from '$lib/server/stock';
+import type { OpResult, StockOp } from '$lib/stock-ops';
 
 /** Same value as MAX_OPS_PER_REQUEST on the server (a $lib/server module cannot be bundled here). */
 export const SYNC_BATCH_SIZE = 100;

@@ -4,24 +4,14 @@ import * as schema from './db/schema';
 import type { HouseholdCtx } from './context';
 import { currentYear } from '../phase';
 import { householdReferenceTimeZone, markCurrentPhaseSilently } from './notifications/phases';
+import type { OpResult, StockOp } from '../stock-ops';
 
 type DB = BaseSQLiteDatabase<'sync', unknown, typeof schema>;
 
 const { stockLots, wines, locations, consumptions, appliedOps } = schema;
 
-export type StockOp =
-  | { opId: string; kind: 'consume'; lotId: number; consumedOn: string; rating?: number | null; note?: string | null }
-  | { opId: string; kind: 'adjust'; lotId: number; delta: number }
-  | { opId: string; kind: 'move'; lotId: number; toLocationId: number; toPosition: string; quantity: number }
-  | { opId: string; kind: 'unconsume'; consumptionId: number };
-
-export type OpResult = {
-  opId: string;
-  status: 'applied' | 'partial' | 'rejected';
-  appliedQuantity?: number;
-  consumptionId?: number;
-  reason?: 'empty_lot' | 'not_found' | 'invalid';
-};
+// The op and result shapes live in a framework-free module: the service worker typechecks them too.
+export type { OpResult, StockOp } from '../stock-ops';
 
 export const MAX_OPS_PER_REQUEST = 100;
 export const MAX_STOCK_DELTA = 10000;

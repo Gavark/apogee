@@ -3,6 +3,7 @@
   import '$lib/styles/base.css';
   import '$lib/styles/components.css';
   import LocaleSwitcher from '$lib/components/LocaleSwitcher.svelte';
+  import OfflineBanner from '$lib/components/OfflineBanner.svelte';
   import ThemeToggle from '$lib/components/ThemeToggle.svelte';
   import Toast from '$lib/components/Toast.svelte';
 
@@ -24,6 +25,7 @@
 {/if}
 
 <main>
+  <OfflineBanner userId={data.user?.id} locale={data.locale} />
   {@render children()}
 </main>
 

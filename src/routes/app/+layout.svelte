@@ -4,10 +4,15 @@
   import * as m from '$paraglide/messages';
   import BottomNav from '$lib/components/BottomNav.svelte';
   import { pendingCount, startSyncLoop } from '$lib/offline/pending.svelte';
+  import { becomeActiveUser } from '$lib/offline/session';
 
   let { children } = $props();
 
   const userId = $derived(page.data.user?.id);
+  // Tells the service worker whose queue to sync; another account's cached pages are dropped first.
+  $effect(() => {
+    if (typeof userId === 'number') void becomeActiveUser(userId).catch(() => {});
+  });
   // Sends the gestures recorded offline as soon as the network allows.
   $effect(() => {
     if (typeof userId === 'number') return startSyncLoop(userId);

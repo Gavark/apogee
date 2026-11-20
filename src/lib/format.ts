@@ -9,3 +9,13 @@ export function formatDateTime(unixSec: number, locale: string): string {
     new Date(unixSec * 1000)
   );
 }
+
+/** Unix seconds -> short localized day, month and time, e.g. "20/11 14:05". */
+export function formatShortDateTime(unixSec: number, locale: string): string {
+  return new Intl.DateTimeFormat(locale, {
+    day: '2-digit',
+    month: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit'
+  }).format(new Date(unixSec * 1000));
+}
