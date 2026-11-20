@@ -1,5 +1,6 @@
 import type { User, Session } from '$lib/server/db/schema';
 import type { Locale } from '$lib/server/auth/locale';
+import type { PublicUser } from '$lib/server/auth/public-user';
 
 declare global {
   namespace App {
@@ -10,7 +11,7 @@ declare global {
       locale: Locale;
     }
     interface PageData {
-      user: User | null;
+      user: PublicUser | null;
     }
     interface Error {}
     interface Platform {}
