@@ -94,13 +94,18 @@
             </select>
           {/snippet}
         </Field>
-        <Field label={m.form_position()} name="position" value={values.position ?? ''} autocomplete="off" />
+        <Field label={m.form_position()} name="position"
+          value={values.position ?? ''}
+          autocomplete="off"
+          error={error?.field === 'position' ? error.message : null}
+        />
         <Field
           label={m.form_quantity()}
           name="quantity"
           type="number"
           inputmode="numeric"
           min="1"
+          max="10000"
           value={values.quantity}
           error={error?.field === 'quantity' ? error.message : null}
         />

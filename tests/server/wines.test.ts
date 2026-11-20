@@ -46,6 +46,13 @@ describe('wines (pure)', () => {
     expect(normalizeText(null)).toBe('');
   });
 
+  it('normalizeText replie les ligatures œ/æ (et Œ/Æ)', () => {
+    expect(normalizeText('Cœur')).toBe('coeur');
+    expect(normalizeText('ŒIL de Perdrix')).toBe('oeil de perdrix');
+    expect(normalizeText('Æther')).toBe('aether');
+    expect(identityKey(wine({ cuvee: 'Cœur de Cuvée' }))).toBe(identityKey(wine({ cuvee: 'Coeur de Cuvee' })));
+  });
+
   it('identityKey ignore casse, accents et espaces', () =>
     expect(identityKey(wine({ producer: 'Château  Margaux' }))).toBe(
       identityKey(wine({ producer: 'chateau margaux ' }))
@@ -164,6 +171,15 @@ describe('wines (db)', () => {
     expect(findDuplicate(tdb.db, ctx, wine({ formatCl: 150 }))).toBeNull();
   });
 
+  it("findDuplicate ne renvoie jamais le vin identique d'un autre foyer", () => {
+    const mine = createWine(tdb.db, ctx, wine(), lot());
+    const theirs = createWine(tdb.db, otherCtx, wine(), lot({ locationId: otherLoc }));
+    expect(findDuplicate(tdb.db, ctx, wine())?.id).toBe(mine.wineId);
+    expect(findDuplicate(tdb.db, otherCtx, wine())?.id).toBe(theirs.wineId);
+    tdb.db.delete(tdb.schema.wines).where(eq(tdb.schema.wines.id, mine.wineId)).run();
+    expect(findDuplicate(tdb.db, ctx, wine())).toBeNull();
+  });
+
   it('createWine rejette quantity < 1 sans rien créer', () => {
     expect(() => createWine(tdb.db, ctx, wine(), lot({ quantity: 0 }))).toThrow();
     expect(count('wines')).toBe(0);
@@ -277,6 +293,33 @@ describe('wines (db)', () => {
       expect(names(listCellar(tdb.db, ctx, { q: 'zéta' }, 2026))).toEqual(['Zeta-2010']);
       expect(names(listCellar(tdb.db, ctx, { q: 'margaux' }, 2026))).toHaveLength(3); // appellation
       expect(listCellar(tdb.db, ctx, { q: 'introuvable' }, 2026)).toEqual([]);
+    });
+
+    it('q trouve « Coeur » avec « Cœur » et inversement', () => {
+      createWine(tdb.db, ctx, wine({ producer: 'Domaine du Cœur' }), lot());
+      expect(listCellar(tdb.db, ctx, { q: 'coeur' }, 2026)).toHaveLength(1);
+      expect(listCellar(tdb.db, ctx, { q: 'CŒUR' }, 2026)).toHaveLength(1);
+    });
+
+    it("le filtre de lieu ignore les lots vides (sauf avec finished)", () => {
+      const { wineId } = createWine(tdb.db, ctx, wine(), lot({ locationId: loc, quantity: 2 }));
+      addStock(tdb.db, ctx, wineId, lot({ locationId: loc2, quantity: 1 }));
+      tdb.db
+        .update(tdb.schema.stockLots)
+        .set({ quantity: 0 })
+        .where(eq(tdb.schema.stockLots.locationId, loc2))
+        .run();
+      expect(listCellar(tdb.db, ctx, { locationId: loc2 }, 2026)).toEqual([]);
+      expect(listCellar(tdb.db, ctx, { locationId: loc }, 2026)).toHaveLength(1);
+      // finished: vin à 0 bouteille seulement ; ici il en reste 2
+      expect(listCellar(tdb.db, ctx, { locationId: loc2, finished: true }, 2026)).toEqual([]);
+    });
+
+    it("finished + lieu : un vin épuisé reste trouvable par le lieu de son lot vide", () => {
+      const { wineId } = createWine(tdb.db, ctx, wine(), lot({ locationId: loc2, quantity: 1 }));
+      tdb.db.update(tdb.schema.stockLots).set({ quantity: 0 }).where(eq(tdb.schema.stockLots.wineId, wineId)).run();
+      expect(listCellar(tdb.db, ctx, { locationId: loc2, finished: true }, 2026)).toHaveLength(1);
+      expect(listCellar(tdb.db, ctx, { locationId: loc2 }, 2026)).toEqual([]);
     });
 
     it('expose les lots avec nom du lieu et quantité', () => {

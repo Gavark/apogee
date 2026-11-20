@@ -128,6 +128,46 @@ describe('submitAddWine', () => {
     expect(r).toEqual({ ok: false, error: { field: 'acquiredYear', reason: 'required' } });
   });
 
+  it("le vin identique d'un autre foyer n'est pas un doublon et reste intact", () => {
+    const other = makeHousehold(tdb, 'B');
+    const otherCtx: HouseholdCtx = { userId: makeUser(tdb, other), householdId: other, isAdmin: false };
+    const otherLoc = makeLocation(tdb, other, 'Cave B');
+    const theirs = submitAddWine(tdb.db, otherCtx, formOf({ locationId: String(otherLoc), quantity: '4' }), Y);
+    if (!theirs.ok) throw new Error('their add failed');
+    const mine = submitAddWine(tdb.db, ctx, formOf({ locationId: String(loc) }), Y);
+    expect(mine.ok).toBe(true);
+    if (!mine.ok) return;
+    expect(mine.wineId).not.toBe(theirs.wineId);
+    // confirmer add-stock ne peut pas non plus atteindre le vin de l'autre foyer
+    const again = formOf({ locationId: String(loc), quantity: '1' });
+    again.set('confirmDuplicate', 'add-stock');
+    const r = submitAddWine(tdb.db, ctx, again, Y);
+    expect(r).toEqual({ ok: true, wineId: mine.wineId });
+    const theirLot = tdb.db.select().from(tdb.schema.stockLots).where(eq(tdb.schema.stockLots.wineId, theirs.wineId)).all();
+    expect(theirLot).toMatchObject([{ quantity: 4 }]);
+  });
+
+  it('quantité > 10000 ou non sûre → erreur sur quantity', () => {
+    for (const q of ['10001', '99999999999999999999']) {
+      const r = submitAddWine(tdb.db, ctx, formOf({ locationId: String(loc), quantity: q }), Y);
+      expect(r).toEqual({ ok: false, error: { field: 'quantity', reason: 'invalid' } });
+    }
+    expect(submitAddWine(tdb.db, ctx, formOf({ locationId: String(loc), quantity: '10000' }), Y).ok).toBe(true);
+  });
+
+  it('champs texte > 200 caractères → invalid sur le champ, notes > 2000', () => {
+    const long = (n: number) => 'x'.repeat(n);
+    for (const field of ['producer', 'cuvee', 'appellation', 'region', 'country', 'grapes', 'position']) {
+      const r = submitAddWine(tdb.db, ctx, formOf({ locationId: String(loc), [field]: long(201) }), Y);
+      expect(r).toEqual({ ok: false, error: { field, reason: 'invalid' } });
+    }
+    const n = submitAddWine(tdb.db, ctx, formOf({ locationId: String(loc), notes: long(2001) }), Y);
+    expect(n).toEqual({ ok: false, error: { field: 'notes', reason: 'invalid' } });
+    expect(wines()).toHaveLength(0);
+    const ok = submitAddWine(tdb.db, ctx, formOf({ locationId: String(loc), cuvee: long(200), notes: long(2000) }), Y);
+    expect(ok.ok).toBe(true);
+  });
+
   it('lieu étranger → erreur locationId, rien enregistré', () => {
     const other = makeHousehold(tdb, 'B');
     const foreign = makeLocation(tdb, other, 'Cave B');
@@ -149,6 +189,8 @@ describe('validateParsedWine', () => {
     expect(validateParsedWine({ ...base, acquiredYear: Y }, Y)).toBeNull();
     expect(validateParsedWine({ ...base, acquiredYear: 1900 }, Y)).toBeNull();
   });
+  it('champ texte trop long → invalid (validateParsedWine)', () =>
+    expect(validateParsedWine({ ...base, region: 'x'.repeat(201) }, Y)).toEqual({ field: 'region', reason: 'invalid' }));
   it('année non entière → invalid', () =>
     expect(validateParsedWine({ ...base, vintage: NaN }, Y)).toEqual({ field: 'vintage', reason: 'invalid' }));
 });

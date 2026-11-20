@@ -31,7 +31,7 @@ export function wineErrorMessage(e: WineInputError): string {
   if (e.reason === 'before_ref') return m.form_err_before_ref();
   switch (e.field) {
     case 'producer':
-      return m.form_err_producer_required();
+      return e.reason === 'required' ? m.form_err_producer_required() : m.form_err_text_too_long();
     case 'acquiredYear':
       return e.reason === 'required' ? m.form_err_acquired_required() : m.form_err_year_invalid();
     case 'vintage':
@@ -42,6 +42,14 @@ export function wineErrorMessage(e: WineInputError): string {
       return m.form_err_quantity_invalid();
     case 'locationId':
       return m.form_err_location_invalid();
+    case 'cuvee':
+    case 'appellation':
+    case 'region':
+    case 'country':
+    case 'grapes':
+    case 'position':
+    case 'notes':
+      return m.form_err_text_too_long();
     default:
       return m.form_err_year_invalid();
   }

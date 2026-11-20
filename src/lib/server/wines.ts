@@ -39,11 +39,21 @@ export type WineInputError = { field: string; reason: 'required' | 'invalid' | W
 
 export const WINE_FORMATS_CL = [37, 50, 75, 150, 300, 600];
 export const MIN_VINTAGE = 1900;
+export const MAX_LOT_QUANTITY = 10000;
+export const MAX_TEXT_LEN = 200;
+export const MAX_NOTES_LEN = 2000;
 
-/** Lowercase, accent-stripped (NFD), whitespace collapsed and trimmed. */
+/** Lowercase, ligatures folded (œ→oe, æ→ae), accent-stripped (NFD), whitespace collapsed and trimmed. */
 export function normalizeText(s: string | null): string {
   if (!s) return '';
-  return s.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().replace(/\s+/g, ' ').trim();
+  return s
+    .toLowerCase()
+    .replace(/œ/g, 'oe')
+    .replace(/æ/g, 'ae')
+    .normalize('NFD')
+    .replace(/\p{M}/gu, '')
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
 export function identityKey(
@@ -87,6 +97,16 @@ export function validateParsedWine(input: WineInput, currentYear: number): WineI
     ['drinkUntil', input.window.drinkUntil]
   ];
   for (const [field, v] of years) if (v !== null && !Number.isInteger(v)) return { field, reason: 'invalid' };
+  const texts: [string, string | null, number][] = [
+    ['producer', input.producer, MAX_TEXT_LEN],
+    ['cuvee', input.cuvee, MAX_TEXT_LEN],
+    ['appellation', input.appellation, MAX_TEXT_LEN],
+    ['region', input.region, MAX_TEXT_LEN],
+    ['country', input.country, MAX_TEXT_LEN],
+    ['grapes', input.grapes, MAX_TEXT_LEN],
+    ['notes', input.notes, MAX_NOTES_LEN]
+  ];
+  for (const [field, v, max] of texts) if (v !== null && v.length > max) return { field, reason: 'invalid' };
   const { acquiredYear } = input;
   if (acquiredYear !== null && (acquiredYear < MIN_VINTAGE || acquiredYear > currentYear))
     return { field: 'acquiredYear', reason: 'invalid' };
@@ -94,7 +114,8 @@ export function validateParsedWine(input: WineInput, currentYear: number): WineI
 }
 
 function assertQuantity(quantity: number): void {
-  if (!Number.isInteger(quantity) || quantity < 1) throw new RangeError('quantity must be an integer >= 1');
+  if (!Number.isSafeInteger(quantity) || quantity < 1 || quantity > MAX_LOT_QUANTITY)
+    throw new RangeError(`quantity must be an integer between 1 and ${MAX_LOT_QUANTITY}`);
 }
 
 function findOwnedWine(db: DB, ctx: HouseholdCtx, wineId: number): Wine {
@@ -308,7 +329,12 @@ export function listCellar(db: DB, ctx: HouseholdCtx, filter: CellarFilter, year
     const lots = lotsByWine.get(w.id) ?? [];
     const row = toRow(w, lots, year);
     if (wantFinished !== (row.bottles === 0)) continue;
-    if (filter.locationId !== undefined && !lots.some((l) => l.locationId === filter.locationId)) continue;
+    // An empty lot is not "in" a location, except when browsing finished wines (all their lots are empty).
+    if (
+      filter.locationId !== undefined &&
+      !lots.some((l) => l.locationId === filter.locationId && (wantFinished || l.quantity > 0))
+    )
+      continue;
     if (filter.phase && row.phase !== filter.phase) continue;
     if (q && ![w.producer, w.cuvee, w.appellation, w.region].some((f) => normalizeText(f).includes(q))) continue;
     rows.push(row);

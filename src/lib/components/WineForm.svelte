@@ -24,11 +24,11 @@
 <fieldset class="group">
   <legend>{m.form_section_wine()}</legend>
   <Field label={m.form_producer()} name="producer" value={v('producer')} autocomplete="off" error={err('producer')} />
-  <Field label={m.form_cuvee()} name="cuvee" value={v('cuvee')} autocomplete="off" />
-  <Field label={m.form_appellation()} name="appellation" value={v('appellation')} autocomplete="off" />
+  <Field label={m.form_cuvee()} name="cuvee" value={v('cuvee')} autocomplete="off" error={err('cuvee')} />
+  <Field label={m.form_appellation()} name="appellation" value={v('appellation')} autocomplete="off" error={err('appellation')} />
   <div class="pair">
-    <Field label={m.form_region()} name="region" value={v('region')} autocomplete="off" />
-    <Field label={m.form_country()} name="country" value={v('country')} autocomplete="off" />
+    <Field label={m.form_region()} name="region" value={v('region')} autocomplete="off" error={err('region')} />
+    <Field label={m.form_country()} name="country" value={v('country')} autocomplete="off" error={err('country')} />
   </div>
   <Field label={m.form_color()} error={err('color')}>
     {#snippet children(control)}
@@ -72,7 +72,7 @@
       error={err('acquiredYear')}
     />
   {/if}
-  <Field label={m.form_grapes()} name="grapes" value={v('grapes')} autocomplete="off" />
+  <Field label={m.form_grapes()} name="grapes" value={v('grapes')} autocomplete="off" error={err('grapes')} />
 </fieldset>
 
 <fieldset class="group">
@@ -88,7 +88,7 @@
   </div>
 </fieldset>
 
-<Field label={m.form_notes()}>
+<Field label={m.form_notes()} error={err('notes')}>
   {#snippet children(control)}
     <textarea {...control} name="notes" rows="3">{v('notes')}</textarea>
   {/snippet}
