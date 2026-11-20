@@ -606,6 +606,26 @@ it('docker-compose monte /data et transmet DISABLE_SIGNUP, ORIGIN, ADMIN_EMAIL, 
 
 ---
 
+### Task 13: GitHub, CI/CD (comme babysleep)
+
+*Ajoutée en cours d'exécution à la demande de l'utilisateur.*
+
+**Files:**
+- Create: `.github/workflows/ci.yml`, `.github/workflows/docker-publish.yml`, `.github/workflows/release.yml`, `.github/ISSUE_TEMPLATE/{bug_report.yml,feature_request.yml,config.yml}`
+- Modify: `README.md` (badge CI, image `ghcr.io/gavark/apogee:latest` dans le démarrage rapide), `docker-compose.yml` (image GHCR par défaut, `build: .` en option commentée)
+- Test: `tests/server/workflows.test.ts`
+
+**Interfaces:**
+- Reprend les workflows de babysleep (`D:\Dev\Gavark\CalculateurSommeilBebe\.github\`) en adaptant : branche par défaut **`main`** (au lieu de `master`), `IMAGE_NAME: gavark/apogee`, textes des modèles d'issues pour Apogée.
+- `ci.yml` : sur PR vers `main` et push sur toute autre branche → `npm ci --ignore-scripts`, `npm run check`, `npm test`, `npm run build`.
+- `docker-publish.yml` : push sur `main`, tags `v*`, `workflow_dispatch` → build natif amd64 + arm64 par digest, puis manifest multi-arch ; tags `branch`, `tag`, `sha-…`, `latest` sur la branche par défaut.
+- `release.yml` : tag `v*` → GitHub Release avec le message du tag annoté.
+
+- [ ] **Step 1: Écrire le test** — lit les YAML en texte : `ci.yml` cible `main` et lance `check`, `test`, `build` ; `docker-publish.yml` contient `gavark/apogee` et les deux plateformes ; `release.yml` se déclenche sur `v*`.
+- [ ] **Step 2: Lancer** — FAIL. **Step 3: Écrire les fichiers.** **Step 4: Lancer** — PASS.
+- [ ] **Step 5: Commit** — `ci: CI, publication d'image GHCR et releases`
+- [ ] **Step 6 (contrôleur, après accord explicite de l'utilisateur)** — `gh repo create Gavark/apogee --public --source . --description "…"`, renommer/pousser `main` puis la branche, ouvrir une PR, vérifier que la CI passe.
+
 ## Vérification finale du plan 1
 
 - [ ] `npm test`, `npm run check`, `npm run build` passent.
