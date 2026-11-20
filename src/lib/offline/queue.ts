@@ -23,7 +23,19 @@ function openDb(): Promise<IDBDatabase> {
       const store = req.result.createObjectStore(STORE, { keyPath: 'op.opId' });
       store.createIndex('userId', 'userId');
     };
-    req.onsuccess = () => resolve(req.result);
+    req.onsuccess = () => {
+      const db = req.result;
+      // Connection closed by the browser or superseded by an upgrade: forget it so the next call reopens.
+      db.onclose = () => {
+        dbPromise = null;
+      };
+      db.onversionchange = () => {
+        db.close();
+        dbPromise = null;
+      };
+      resolve(db);
+    };
+    req.onblocked = () => {};
     req.onerror = () => {
       dbPromise = null;
       reject(req.error);
@@ -39,13 +51,22 @@ const wrap = <T>(req: IDBRequest<T>) =>
   });
 
 async function tx<T>(mode: IDBTransactionMode, fn: (store: IDBObjectStore) => Promise<T>): Promise<T> {
-  const db = await openDb();
-  const t = db.transaction(STORE, mode);
+  let db = await openDb();
+  let t: IDBTransaction;
+  try {
+    t = db.transaction(STORE, mode);
+  } catch (e) {
+    if (!(e instanceof DOMException && e.name === 'InvalidStateError')) throw e;
+    dbPromise = null; // dead connection: reopen once
+    db = await openDb();
+    t = db.transaction(STORE, mode);
+  }
   const done = new Promise<void>((resolve, reject) => {
     t.oncomplete = () => resolve();
     t.onerror = () => reject(t.error);
     t.onabort = () => reject(t.error);
   });
+  done.catch(() => {}); // never an unhandled rejection; the fn error (or done below) is what surfaces
   const result = await fn(t.objectStore(STORE));
   await done;
   return result;

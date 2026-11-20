@@ -1,10 +1,12 @@
 import 'fake-indexeddb/auto';
-import { IDBFactory } from 'fake-indexeddb';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { IDBDatabase, IDBFactory, IDBObjectStore } from 'fake-indexeddb';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { bumpAttempts, clearQueue, countQueued, enqueue, listQueued, removeQueued, _resetForTests } from '$lib/offline/queue';
 import type { StockOp } from '$lib/server/stock';
 
 const adj = (opId: string, delta = 1): StockOp => ({ opId, kind: 'adjust', lotId: 1, delta });
+
+afterEach(() => vi.restoreAllMocks());
 
 beforeEach(() => {
   _resetForTests();
@@ -57,5 +59,32 @@ describe('file d’opérations hors ligne', () => {
     await bumpAttempts(['a', 'b']);
     const l = await listQueued(1);
     expect(l.map((q) => q.attempts)).toEqual([2, 1]);
+  });
+
+  it('une opération qui échoue dans la transaction rejette avec son erreur, sans rejet non géré', async () => {
+    const unhandled: unknown[] = [];
+    const h = (r: unknown) => unhandled.push(r);
+    process.on('unhandledRejection', h);
+    vi.spyOn(IDBObjectStore.prototype, 'add').mockImplementation(function (this: IDBObjectStore) {
+      this.transaction.abort();
+      throw new Error('boom');
+    });
+    await expect(enqueue(1, adj('a'))).rejects.toThrow('boom');
+    await new Promise((r) => setTimeout(r, 20));
+    process.off('unhandledRejection', h);
+    expect(unhandled).toEqual([]);
+    vi.restoreAllMocks();
+    await enqueue(1, adj('b'));
+    expect(await countQueued(1)).toBe(1);
+  });
+
+  it('après fermeture de la connexion, la prochaine opération rouvre la base', async () => {
+    const spy = vi.spyOn(IDBDatabase.prototype, 'transaction');
+    await enqueue(1, adj('a'));
+    const db = spy.mock.contexts[0] as IDBDatabase;
+    spy.mockRestore();
+    db.close(); // no onclose event fires on a manual close: exercises the InvalidStateError path
+    await enqueue(1, adj('b'));
+    expect((await listQueued(1)).map((q) => q.op.opId)).toEqual(['a', 'b']);
   });
 });
