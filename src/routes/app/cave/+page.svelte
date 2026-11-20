@@ -8,10 +8,19 @@
   import EmptyState from '$lib/components/EmptyState.svelte';
   import Field from '$lib/components/Field.svelte';
   import WineRow from '$lib/components/WineRow.svelte';
+  import { applyPending } from '$lib/offline/overlay';
+  import { pendingOps } from '$lib/offline/pending.svelte';
   import { COLOR_OPTIONS } from '$lib/wine-labels';
   import { HOME_SECTION_ORDER, type Phase } from '$lib/phase';
 
   let { data } = $props();
+
+  // Pending gestures (queued offline, or applied and not reloaded yet) show at once.
+  const rows = $derived.by(() => {
+    const ops = pendingOps();
+    return ops.length === 0 ? data.rows : data.rows.map((r) => applyPending(r, ops));
+  });
+  const total = $derived(rows.reduce((n, r) => n + r.bottles, 0));
 
   const PHASE_LABELS: Record<Phase, () => string> = {
     unknown: m.phase_unknown,
@@ -43,7 +52,7 @@
 
 <header class="head">
   <h1>{m.cave_title()}</h1>
-  <p class="muted">{m.wine_bottle_count({ count: data.total })}</p>
+  <p class="muted">{m.wine_bottle_count({ count: total })}</p>
   <Button variant="ghost" size="sm" href="/app/locations">
     <MapPin size={16} aria-hidden="true" />{m.cave_manage_locations()}
   </Button>
@@ -94,7 +103,7 @@
   </label>
 </form>
 
-{#if data.rows.length === 0}
+{#if rows.length === 0}
   <EmptyState
     title={m.cave_empty_title()}
     description={data.filter.finished && !data.filter.q ? m.cave_empty_finished() : m.cave_empty_desc()}
@@ -104,7 +113,7 @@
   </EmptyState>
 {:else}
   <ul class="rows">
-    {#each data.rows as row (row.wine.id)}<WineRow {row} />{/each}
+    {#each rows as row (row.wine.id)}<WineRow {row} />{/each}
   </ul>
 {/if}
 

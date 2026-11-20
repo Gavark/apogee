@@ -1,6 +1,5 @@
 <script lang="ts">
   import { enhance } from '$app/forms';
-  import { invalidateAll } from '$app/navigation';
   import PencilSimple from 'phosphor-svelte/lib/PencilSimple';
   import Trash from 'phosphor-svelte/lib/Trash';
   import * as m from '$paraglide/messages';
@@ -13,7 +12,9 @@
   import Sheet from '$lib/components/Sheet.svelte';
   import AiEstimateSheet from '$lib/components/AiEstimateSheet.svelte';
   import WindowTimeline from '$lib/components/WindowTimeline.svelte';
-  import { newOpId, sendStockOps, SessionExpiredError } from '$lib/stock-client';
+  import { applyPending } from '$lib/offline/overlay';
+  import { pendingOps, reload } from '$lib/offline/pending.svelte';
+  import { newOpId, sendStockOps, SessionExpiredError, undoGesture, type ClientOpResult } from '$lib/stock-client';
   import { showToast } from '$lib/toast.svelte';
   import { colorLabel, confidenceLabel, formatLabel, wineTitle } from '$lib/wine-labels';
   import { currentYear } from '$lib/phase';
@@ -22,7 +23,8 @@
 
   let { data } = $props();
 
-  const detail = $derived(data.detail);
+  // Pending gestures (queued offline, or applied and not reloaded yet) show at once.
+  const detail = $derived(applyPending(data.detail, pendingOps()));
   const wine = $derived(detail.wine);
   const lots = $derived(detail.lots.filter((l) => l.quantity > 0));
   const year = $derived(currentYear(data.user?.timezone ?? 'UTC'));
@@ -56,13 +58,18 @@
     invalid: m.wine_err_op
   };
 
-  /** Sends one op and refreshes the page data. Resolves with the result, or null when it failed (message shown). */
-  async function run(op: StockOp): Promise<OpResult | null> {
+  /**
+   * Sends one op and refreshes the page data (not needed while it is queued: the overlay shows it).
+   * Resolves with the result, or null when it failed (message shown).
+   */
+  async function run(op: StockOp): Promise<ClientOpResult | null> {
     if (busy) return null;
     busy = true;
     errorMsg = null;
+    let queued = false;
     try {
       const [result] = await sendStockOps([op]);
+      queued = result.status === 'queued';
       if (result.status === 'rejected') {
         errorMsg = REASONS[result.reason ?? 'invalid']();
         return null;
@@ -72,23 +79,22 @@
       if (!(e instanceof SessionExpiredError)) errorMsg = m.wine_err_network();
       return null;
     } finally {
-      await invalidateAll();
+      if (!queued) await reload();
       busy = false;
     }
   }
 
   async function adjust(lot: CellarLot, delta: 1 | -1) {
-    const r = await run({ opId: newOpId(), kind: 'adjust', lotId: lot.lotId, delta });
-    // Undo only what was really removed: a lot already emptied elsewhere applies 0.
-    const removed = r && delta === -1 ? -(r.appliedQuantity ?? 0) : 0;
-    if (removed > 0) {
-      showToast(m.wine_toast_removed(), {
-        label: m.wine_toast_undo(),
-        run: async () => {
-          await run({ opId: newOpId(), kind: 'adjust', lotId: lot.lotId, delta: removed });
-        }
-      });
+    const op: StockOp = { opId: newOpId(), kind: 'adjust', lotId: lot.lotId, delta };
+    const r = await run(op);
+    if (!r) return;
+    const undo = { label: m.wine_toast_undo(), run: () => void undoGesture(op) };
+    if (r.status === 'queued') {
+      showToast(m.offline_saved(), delta === -1 ? undo : undefined);
+      return;
     }
+    // Undo only what was really removed: a lot already emptied elsewhere applies 0.
+    if (delta === -1 && (r.appliedQuantity ?? 0) < 0) showToast(m.wine_toast_removed(), undo);
   }
 
   // Moving a lot onto itself (same location, same spot) is rejected by the server: block it here.
@@ -117,7 +123,8 @@
       quantity
     });
     moving = null;
-    if (r && r.appliedQuantity) showToast(m.wine_toast_moved({ count: r.appliedQuantity }));
+    if (r?.status === 'queued') showToast(m.offline_saved());
+    else if (r?.appliedQuantity) showToast(m.wine_toast_moved({ count: r.appliedQuantity }));
   }
 </script>
 

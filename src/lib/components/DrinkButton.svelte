@@ -1,22 +1,19 @@
 <script lang="ts">
-  import { invalidateAll } from '$app/navigation';
   import Wine from 'phosphor-svelte/lib/Wine';
   import * as m from '$paraglide/messages';
   import Button from '$lib/components/Button.svelte';
   import Sheet from '$lib/components/Sheet.svelte';
-  import { newOpId, sendStockOps, SessionExpiredError } from '$lib/stock-client';
+  import { reload } from '$lib/offline/pending.svelte';
+  import { newOpId, sendStockOps, SessionExpiredError, undoGesture } from '$lib/stock-client';
   import { showToast } from '$lib/toast.svelte';
   import { wineTitle } from '$lib/wine-labels';
   import type { CellarLot, CellarRow } from '$lib/server/wines';
+  import type { StockOp } from '$lib/server/stock';
 
-  type Props = {
-    row: CellarRow;
-    block?: boolean;
-    /** +1 when a consumption is sent, -1 once it settled and the data was reloaded (optimistic count). */
-    onpending?: (delta: 1 | -1) => void;
-  };
+  // `row` comes with the pending gestures applied (optimistic overlay): the count drops at once.
+  type Props = { row: CellarRow; block?: boolean };
 
-  let { row, block = false, onpending }: Props = $props();
+  let { row, block = false }: Props = $props();
 
   const lots = $derived(row.lots.filter((l) => l.quantity > 0));
   let picking = $state(false);
@@ -28,41 +25,31 @@
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
   }
 
-  // Uses no component state: the toast's undo outlives this button
-  // (a finished wine leaves the list, and the button with it).
-  async function undo(consumptionId: number) {
-    try {
-      const [r] = await sendStockOps([{ opId: newOpId(), kind: 'unconsume', consumptionId }]);
-      showToast(r.status === 'applied' ? m.wine_toast_undone() : m.wine_err_op());
-    } catch (e) {
-      if (!(e instanceof SessionExpiredError)) showToast(m.wine_err_network());
-    } finally {
-      await invalidateAll();
-    }
-  }
-
   async function drink(lot: CellarLot) {
-    // `busy` is set synchronously: a double tap sends one operation.
+    // `busy` is set synchronously: a double tap while a send is in flight sends one operation.
     if (busy) return;
     busy = true;
     picking = false;
-    onpending?.(1);
+    const op: StockOp = { opId: newOpId(), kind: 'consume', lotId: lot.lotId, consumedOn: today() };
+    let queued = false;
     try {
-      const [r] = await sendStockOps([{ opId: newOpId(), kind: 'consume', lotId: lot.lotId, consumedOn: today() }]);
-      if (r.status === 'applied' && r.consumptionId !== undefined) {
-        const consumptionId = r.consumptionId;
-        showToast(m.drink_toast({ wine: wineTitle(row.wine) }), {
-          label: m.wine_toast_undo(),
-          run: () => void undo(consumptionId)
-        });
+      const [r] = await sendStockOps([op]);
+      // The undo uses no component state: the toast outlives this button
+      // (a finished wine leaves the list, and the button with it).
+      const undo = { label: m.wine_toast_undo(), run: () => void undoGesture(op) };
+      if (r.status === 'queued') {
+        queued = true;
+        showToast(m.offline_saved(), undo);
+      } else if (r.status === 'applied' && r.consumptionId !== undefined) {
+        showToast(m.drink_toast({ wine: wineTitle(row.wine) }), undo);
       } else if (r.status === 'rejected') {
         showToast(r.reason === 'empty_lot' ? m.drink_empty_lot() : m.wine_err_op());
       }
     } catch (e) {
       if (!(e instanceof SessionExpiredError)) showToast(m.wine_err_network());
     } finally {
-      await invalidateAll();
-      onpending?.(-1);
+      // Queued: nothing changed on the server yet, the overlay already shows it.
+      if (!queued) await reload();
       busy = false;
     }
   }

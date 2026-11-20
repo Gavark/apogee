@@ -445,6 +445,23 @@
   "cave_reset": "Réinitialiser",
   "drink_toast": "Bue · {wine}",
   "drink_empty_lot": "Plus de bouteille à cet endroit",
+  "offline_saved": "Enregistré, sera synchronisé",
+  "offline_op_failed": "Une opération n'a pas pu être appliquée",
+  "offline_pending": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} geste en attente",
+        "countPlural=*": "{count} gestes en attente"
+      }
+    }
+  ],
   "error_title": "Erreur {status}",
   "error_not_found": "Cette page n'existe pas.",
   "error_generic": "Une erreur est survenue. Réessayez dans un instant.",

@@ -7,9 +7,19 @@
   import PhaseBadge from '$lib/components/PhaseBadge.svelte';
   import WineRow from '$lib/components/WineRow.svelte';
   import AiEstimateSheet from '$lib/components/AiEstimateSheet.svelte';
+  import { applyPending } from '$lib/offline/overlay';
+  import { pendingOps } from '$lib/offline/pending.svelte';
   import type { CellarRow } from '$lib/server/wines';
 
   let { data } = $props();
+
+  // Pending gestures (queued offline, or applied and not reloaded yet) show at once.
+  const sections = $derived.by(() => {
+    const ops = pendingOps();
+    if (ops.length === 0) return data.sections;
+    return data.sections.map((s) => ({ ...s, rows: s.rows.map((r) => applyPending(r, ops)) }));
+  });
+  const total = $derived(sections.reduce((n, s) => n + s.rows.reduce((k, r) => k + r.bottles, 0), 0));
 
   // The wine being estimated (a snapshot of its row: the sheet only needs its id and current window).
   let estimating = $state<CellarRow | null>(null);
@@ -20,16 +30,16 @@
 
 <header class="head">
   <h1>{m.home_title()}</h1>
-  <p class="muted">{m.home_total({ count: data.total })}</p>
+  <p class="muted">{m.home_total({ count: total })}</p>
 </header>
 
-{#if data.sections.length === 0}
+{#if sections.length === 0}
   <EmptyState title={m.home_empty_title()} description={m.home_empty_desc()} icon={Wine}>
     <Button href="/app/add">{m.home_empty_action()}</Button>
   </EmptyState>
 {:else}
   <div class="sections">
-    {#each data.sections as section (section.phase)}
+    {#each sections as section (section.phase)}
       {#if section.phase === 'too_young'}
         <!-- Not urgent: collapsed by default, the rows show their opening year. -->
         <details class="section">
