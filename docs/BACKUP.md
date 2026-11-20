@@ -73,6 +73,43 @@ Le conteneur sauvegarde sur le même disque que l'application : cela protège d'
 rsync -a /opt/apogee/backups/ utilisateur@autre-serveur:/sauvegardes/apogee/
 ```
 
+## Hôte Windows : tâche planifiée + dossier synchronisé
+
+Si Docker tourne sur une machine Windows, la copie hors machine la plus simple est un dossier que votre client cloud synchronise déjà (Google Drive pour ordinateur, OneDrive, Dropbox, partage NAS). Docker Desktop ne voit pas le lecteur virtuel de Google Drive : la copie se fait donc côté Windows, avec [`scripts/sync-backups-offsite.ps1`](../scripts/sync-backups-offsite.ps1) (Windows PowerShell 5.1 ou PowerShell 7), qui copie `./backups/` vers ce dossier et y fait la rotation :
+
+- **Copie** : chaque `*.sqlite` et `*.tar.gz` de `./backups/` de moins de `-RetentionDays` jours (7 par défaut) absent à destination ou de taille différente, copies nommées comprises. Chaque copie est comparée à l'original par SHA256 ; un écart supprime la copie et fait échouer l'exécution.
+- **Rotation** : les `*.sqlite` et `*.tar.gz` de destination de plus de `-RetentionDays` jours sont supprimés. Si la destination n'a aucune sauvegarde récente (le conteneur en échec depuis une semaine, par exemple), rien n'est supprimé : le dossier n'est jamais vidé.
+- **Lecteur absent** (client Drive arrêté) : échec sans rien toucher. Le dossier de destination est créé s'il manque.
+- **Dossier `backups/` absent** (Apogée pas encore déployé) : message « rien à copier » et sortie 0, pour que la tâche ne soit pas en échec chaque nuit avant le premier déploiement.
+- **Journal** : `./backups/sync-offsite.log` (500 dernières lignes). Le code de sortie est non nul en cas d'échec, visible dans « Résultat de la dernière exécution » du Planificateur de tâches.
+
+Commencez par voir ce qu'il ferait :
+
+```powershell
+powershell -File scripts\sync-backups-offsite.ps1 -Destination 'G:\Mon Drive\Perso\Backup\Apogee' -DryRun
+```
+
+Puis enregistrez une tâche quotidienne (depuis le dossier du dépôt) :
+
+```powershell
+$script = (Resolve-Path scripts\sync-backups-offsite.ps1).Path
+$dest   = 'G:\Mon Drive\Perso\Backup\Apogee'
+$action = New-ScheduledTaskAction -Execute 'powershell.exe' `
+  -Argument "-NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$script`" -Destination `"$dest`""
+$trigger  = New-ScheduledTaskTrigger -Daily -At '23:15'
+$settings = New-ScheduledTaskSettingsSet -StartWhenAvailable -AllowStartIfOnBatteries `
+  -DontStopIfGoingOnBatteries -ExecutionTimeLimit (New-TimeSpan -Minutes 15)
+$principal = New-ScheduledTaskPrincipal -UserId "$env:USERDOMAIN\$env:USERNAME" -LogonType Interactive
+Register-ScheduledTask -TaskPath '\Apogee\' -TaskName 'Backup vers Google Drive' `
+  -Action $action -Trigger $trigger -Settings $settings -Principal $principal
+```
+
+À soigner :
+
+- **Horaire** : le déclencheur suit l'horloge de l'**hôte**, alors que `BACKUP_SCHEDULE` suit le `TZ` du conteneur. Laissez au moins une demi-heure après la sauvegarde (lancer plus tôt est sans danger : la sauvegarde du jour part la nuit suivante). `-StartWhenAvailable` rattrape une exécution manquée machine éteinte.
+- **Session ouverte** : une lettre de lecteur comme `G:` n'existe que pendant que le client de synchronisation tourne dans votre session ; la tâche utilise donc une ouverture de session interactive. Si le lecteur manque, l'exécution échoue sans rien toucher.
+- **Fichiers supprimés** : la rotation supprime via le client de synchronisation ; les fichiers passent généralement par la corbeille du fournisseur (30 jours sur Google Drive) avant de disparaître vraiment.
+
 ## À conserver en plus
 
 - `.env` (ORIGIN, identifiants d'amorçage) : sans lui l'instance démarre, mais vous devrez resaisir la configuration.

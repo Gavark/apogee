@@ -92,6 +92,7 @@ L'inscription se fait uniquement sur invitation. Les membres d'un foyer invitent
 ## Sauvegardes
 
 Le `docker-compose.yml` lance un conteneur `backup` qui sauvegarde chaque nuit la base SQLite et, si vous utilisez l'analyse IA, le dossier `data/photos/` (photos des étiquettes) dans `./backups/`, vérifie le résultat et ne garde que les dernières copies (`BACKUP_RETENTION`, `BACKUP_SCHEDULE`). Pensez à copier `backups/` hors de la machine. La sauvegarde à la demande, la restauration et les détails sont dans [docs/BACKUP.md](docs/BACKUP.md).
+Sous Windows, [`scripts/sync-backups-offsite.ps1`](scripts/sync-backups-offsite.ps1) copie ces sauvegardes vers un dossier Google Drive : voir [la section dédiée](docs/BACKUP.md#hôte-windows--tâche-planifiée--dossier-synchronisé).
 
 ## Mise à jour
 
