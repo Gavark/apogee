@@ -56,6 +56,7 @@
   }
 
   async function logoutAnyway() {
+    if (!network.online) return; // the queued gestures would be dropped for a logout that cannot happen
     const userId = data.user?.id;
     if (typeof userId === 'number') await clearQueue(userId).catch(() => {});
     unsynced = 0;
@@ -65,7 +66,8 @@
   // Drop the offline copies and this browser's push subscription (best effort, short timeout), then log out.
   let leaving = false;
   async function leave() {
-    if (leaving) return;
+    // Offline, the logout POST would fail once the offline copies are gone: the buttons are disabled.
+    if (leaving || !network.online) return;
     leaving = true;
     await leaveActiveUser().catch(() => {});
     await unsubscribeThisDevice({
@@ -200,7 +202,7 @@
   </section>
 
   <form method="POST" action="/logout" onsubmit={logout} bind:this={logoutForm}>
-    <Button type="submit" variant="secondary" block>
+    <Button type="submit" variant="secondary" block disabled={!network.online}>
       <SignOut size={18} aria-hidden="true" />
       {m.account_logout()}
     </Button>
@@ -210,7 +212,7 @@
 <Sheet open={unsynced > 0} onclose={() => (unsynced = 0)} title={m.logout_unsynced_title()}>
   <p>{m.logout_unsynced_body({ count: unsynced })}</p>
   <div class="sheet-actions">
-    <Button variant="danger" block onclick={logoutAnyway}>{m.logout_anyway()}</Button>
+    <Button variant="danger" block onclick={logoutAnyway} disabled={!network.online}>{m.logout_anyway()}</Button>
     <Button variant="ghost" block onclick={() => (unsynced = 0)}>{m.logout_stay()}</Button>
   </div>
 </Sheet>

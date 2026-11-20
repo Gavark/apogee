@@ -33,6 +33,8 @@ let version = 0;
 const results = new Map<string, OpResult>();
 /** Ops whose sendStockOps caller is waiting for the result and reports it itself. */
 const claimed = new Set<string>();
+/** Gestures made in this tab by the owner (most recent last): only those may be replayed to undo them. */
+const ownGestures = new Set<string>();
 /** The user the state above belongs to. */
 let owner: number | null = null;
 /** The follow-ups (queue re-read, warning, reload) of the syncs, chained in order. */
@@ -49,6 +51,7 @@ export function usePendingFor(userId: number): void {
   version++;
   state.entries = [];
   results.clear();
+  ownGestures.clear();
 }
 
 /** Ops to overlay on the page data (reactive). */
@@ -73,8 +76,15 @@ export function resultFor(opId: string): OpResult | undefined {
   return results.get(opId);
 }
 
+/** Whether this tab made the gesture, for the current owner (its result may still be unknown here). */
+export function isOwnGesture(opId: string): boolean {
+  return ownGestures.has(opId);
+}
+
 /** Shows ops at once, before they are even stored. */
 export function trackOps(ops: StockOp[]): void {
+  for (const o of ops) ownGestures.add(o.opId);
+  while (ownGestures.size > MAX_RESULTS) ownGestures.delete(ownGestures.values().next().value as string);
   const known = new Set(state.entries.map((e) => e.op.opId));
   const added = ops.filter((o) => !known.has(o.opId)).map((op) => ({ op, gen: null, stored: false }));
   if (added.length === 0) return;
@@ -282,6 +292,7 @@ export function _resetPendingForTests(): void {
   owner = null;
   state.entries = [];
   results.clear();
+  ownGestures.clear();
   claimed.clear();
   gen = 0;
   version++;

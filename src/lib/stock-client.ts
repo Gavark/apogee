@@ -10,6 +10,7 @@ import {
   claimOps,
   forgetOps,
   hideUndone,
+  isOwnGesture,
   markStored,
   rememberResults,
   reload,
@@ -110,7 +111,8 @@ export async function sendStockOps(ops: StockOp[]): Promise<ClientOpResult[]> {
  *   answers with the stored result), then its inverse is sent; without network, the undo is recorded
  *   on the queued gesture, and the sync that learns its result queues and sends its inverse, even
  *   after the app was closed (`deferred`);
- * - already synced → sends the inverse built from its known result; result unknown → null.
+ * - already synced → sends the inverse built from its result; a gesture made here but synced by
+ *   another context (result unknown here) is replayed first to learn it; otherwise null.
  * Resolves with the inverse op's result in the last two cases.
  */
 export async function undoStockOp(op: StockOp): Promise<ClientOpResult | 'unqueued' | 'deferred' | null> {
@@ -153,7 +155,22 @@ export async function undoStockOp(op: StockOp): Promise<ClientOpResult | 'unqueu
       return 'deferred';
     }
   }
-  const inverse = inverseOf(op, resultFor(op.opId));
+  let known = resultFor(op.opId);
+  if (known === undefined && userId !== undefined && isOwnGesture(op.opId)) {
+    // Synced by another context (tab, service worker): replay it (idempotent per opId: the server
+    // answers with its stored result, applying nothing) to learn what to undo.
+    const res = await postOps([op], userId);
+    if (res.kind === 'unauthorized') {
+      await goto('/login');
+      throw new SessionExpiredError();
+    }
+    if (res.kind === 'failed') throw new Error('undo: replay failed');
+    if (res.kind === 'ok') {
+      rememberResults(res.results);
+      known = resultFor(op.opId);
+    }
+  }
+  const inverse = inverseOf(op, known);
   if (!inverse) return null;
   const [r] = await sendStockOps([inverse]);
   return r;
@@ -173,8 +190,9 @@ export async function undoGesture(op: StockOp): Promise<void> {
     } else if (r?.status === 'queued') {
       changed = false;
       showToast(m.offline_saved());
-    } else if (r) {
-      showToast(r.status === 'applied' ? m.wine_toast_undone() : m.wine_err_op());
+    } else {
+      // null: nothing could be undone (result unknown, or nothing applied to cancel).
+      showToast(r?.status === 'applied' ? m.wine_toast_undone() : m.wine_err_op());
     }
   } catch (e) {
     if (!(e instanceof SessionExpiredError)) showToast(m.wine_err_network());

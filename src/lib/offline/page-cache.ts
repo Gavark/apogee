@@ -151,6 +151,22 @@ export async function reloadAfterColdStart(
   await deps.invalidate();
 }
 
+/**
+ * Network first, with a deadline when there is a copy: the network's response (errors and redirects
+ * included), or `copy` when the network fails or takes longer than `ms` (weak signal: no waiting for
+ * the browser's own timeout). Without a copy, the network whatever it takes, its failure included.
+ */
+export async function networkOrCopy(network: Promise<Response>, copy: Response | null, ms: number): Promise<Response> {
+  if (!copy) return network;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const deadline = new Promise<null>((resolve) => (timer = setTimeout(() => resolve(null), ms)));
+  try {
+    return (await Promise.race([network.catch(() => null), deadline])) ?? copy;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 /** Drops every cached page (logout, another account). Works from a page and from the service worker. */
 export async function clearPageCache(): Promise<void> {
   if (typeof caches === 'undefined') return;

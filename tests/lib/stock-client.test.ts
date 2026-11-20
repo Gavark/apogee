@@ -10,7 +10,7 @@ const { goto, invalidateAll, page } = vi.hoisted(() => ({
 vi.mock('$app/navigation', () => ({ goto, invalidateAll }));
 vi.mock('$app/state', () => ({ page }));
 
-import { sendStockOps, SessionExpiredError, undoStockOp } from '../../src/lib/stock-client';
+import { sendStockOps, SessionExpiredError, undoGesture, undoStockOp } from '../../src/lib/stock-client';
 import { listQueued, removeQueued, _resetForTests } from '$lib/offline/queue';
 import { pendingCount, pendingOps, refreshPending, startSyncLoop, syncPending, trackOps, usePendingFor, _resetPendingForTests } from '$lib/offline/pending.svelte';
 import { dismissToast, toast } from '$lib/toast.svelte';
@@ -269,10 +269,37 @@ describe('undoStockOp', () => {
     expect(invalidateAll).toHaveBeenCalled();
   });
 
-  it('résultat inconnu → rien n’est envoyé', async () => {
+  it('geste jamais vu dans cet onglet → rien n’est envoyé', async () => {
     const s = serve();
     await expect(undoStockOp(consume('never-seen'))).resolves.toBeNull();
     expect(s.fetch).not.toHaveBeenCalled();
+  });
+
+  it('geste d’ici synchronisé par un autre contexte (résultat inconnu ici) → rejoué pour connaître son résultat, puis inverse', async () => {
+    const g = consume('a');
+    offline();
+    await sendStockOps([g]);
+    await removeQueued(['a']); // another context synced it: this tab never saw the result
+    const s = serve((o) => ({ opId: o.opId, status: 'applied', consumptionId: o.kind === 'consume' ? 3 : undefined }));
+    await expect(undoStockOp(g)).resolves.toMatchObject({ status: 'applied' });
+    expect(s.batches.map((b) => b.map((o) => o.kind))).toEqual([['consume'], ['unconsume']]);
+    expect(s.batches[0][0].opId).toBe('a');
+    expect(s.batches[1][0]).toMatchObject({ consumptionId: 3 });
+  });
+
+  it('rejeu sans réseau → échec réseau signalé, pas de silence', async () => {
+    const g = consume('a');
+    offline();
+    await sendStockOps([g]);
+    await removeQueued(['a']);
+    await undoGesture(g);
+    expect(toast.current?.message).toBe(m.wine_err_network());
+  });
+
+  it('rien à annuler (aucun résultat connu) → message d’échec, pas de silence', async () => {
+    serve();
+    await undoGesture(consume('never-seen'));
+    expect(toast.current?.message).toBe(m.wine_err_op());
   });
 });
 

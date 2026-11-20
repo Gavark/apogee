@@ -6,13 +6,13 @@ import { safeNotificationUrl } from '../lib/push-url';
 import {
   PAGE_CACHE,
   cacheKeyFor,
-  clearPageCache,
   dataBodyToServe,
   dataBodyToStore,
   invalidatedBits,
   isDataRequest,
   isOfflineReadable,
   isStorable,
+  networkOrCopy,
   offlineRedirectFor
 } from '../lib/offline/page-cache';
 import { getActiveUser } from '../lib/offline/queue';
@@ -103,37 +103,34 @@ self.addEventListener('fetch', (event) => {
   if (redirectTo) event.respondWith(orRedirect(event.request, redirectTo));
 });
 
+/** On a weak signal, how long a page waits for the network before its copy is shown instead. */
+const NETWORK_TIMEOUT_MS = 4_000;
+
 /**
- * A page with nothing to keep (`/`, which only redirects): the network, else a redirect to a
- * reading page the copy can answer. The installed app may still start there offline.
+ * A page with nothing to keep (`/`, which only redirects): the network, else (failure or deadline)
+ * a redirect to a reading page the copy can answer. The installed app may still start there offline.
  */
-async function orRedirect(request: Request, to: string): Promise<Response> {
-  try {
-    return await fetch(request);
-  } catch {
-    return Response.redirect(new URL(to, self.location.origin).href, 302);
-  }
+function orRedirect(request: Request, to: string): Promise<Response> {
+  const fallback = Response.redirect(new URL(to, self.location.origin).href, 302);
+  return networkOrCopy(fetch(request), fallback, NETWORK_TIMEOUT_MS);
 }
 
 const pageKey = (url: URL) => new URL(cacheKeyFor(url), self.location.origin).href;
 
 /**
  * The reading pages (HTML and __data.json): the network first, a copy of every plain 200 kept
- * for later; the copy only when the network fails. With no copy, the failure goes through and
- * SvelteKit shows its offline error. Errors, redirects (an expired session sends to /login) and
- * 401s always reach the page, never replaced by the copy.
+ * for later; the copy when the network fails or is too slow (NETWORK_TIMEOUT_MS). With no copy,
+ * the network whatever it takes, and its failure goes through: SvelteKit shows its offline error.
+ * Errors, redirects (an expired session sends to /login) and 401s always reach the page, never
+ * replaced by the copy.
  */
 async function networkFirst(event: FetchEvent, url: URL): Promise<Response> {
-  let res: Response;
-  try {
-    res = await fetch(event.request);
-  } catch (err) {
-    const hit = await fromCache(url).catch(() => null);
-    if (hit) return hit;
-    throw err;
-  }
-  if (isStorable(res)) event.waitUntil(store(url, res.clone()).catch(() => {}));
-  return res;
+  const network = fetch(event.request);
+  // Kept even when it arrives after the deadline (the copy was shown meanwhile). Registered before
+  // anything reads the response, so the clone is taken first.
+  event.waitUntil(network.then((res) => (isStorable(res) ? store(url, res.clone()) : undefined)).catch(() => {}));
+  const copy = await fromCache(url).catch(() => null);
+  return networkOrCopy(network, copy, NETWORK_TIMEOUT_MS);
 }
 
 async function store(url: URL, res: Response): Promise<void> {
@@ -156,11 +153,6 @@ async function fromCache(url: URL): Promise<Response | null> {
   const body = dataBodyToServe(await hit.text(), invalidatedBits(url));
   return body === null ? null : new Response(body, { headers: { 'content-type': 'application/json' } });
 }
-
-self.addEventListener('message', (event) => {
-  const data = event.data as { type?: unknown } | null;
-  if (data?.type === 'clear-page-cache') event.waitUntil(clearPageCache());
-});
 
 // Gestures queued offline, sent once the browser sees the network again, even with no tab open.
 self.addEventListener('sync', (e) => {

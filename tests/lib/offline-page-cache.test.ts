@@ -9,6 +9,7 @@ import {
   isOfflineReadable,
   reloadAfterColdStart,
   isStorable,
+  networkOrCopy,
   offlineRedirectFor
 } from '$lib/offline/page-cache';
 
@@ -282,5 +283,37 @@ describe('reloadAfterColdStart', () => {
     await reloadAfterColdStart(u('/app/locations'), ORIGIN, d);
     expect(d.fetch).not.toHaveBeenCalled();
     expect(d.invalidate).not.toHaveBeenCalled();
+  });
+});
+
+describe('networkOrCopy (délai réseau)', () => {
+  afterEach(() => vi.useRealTimers());
+  const copy = () => new Response('copie');
+  const later = <T>(ms: number, v: T) => new Promise<T>((r) => setTimeout(() => r(v), ms));
+
+  it('réseau rapide → la réponse du réseau, même une erreur (jamais remplacée par la copie)', async () => {
+    await expect(networkOrCopy(Promise.resolve(new Response('frais')), copy(), 4000).then((r) => r.text())).resolves.toBe('frais');
+    await expect(networkOrCopy(Promise.resolve(new Response('', { status: 500 })), copy(), 4000).then((r) => r.status)).resolves.toBe(500);
+  });
+
+  it('réseau en échec → la copie', async () => {
+    const res = await networkOrCopy(Promise.reject(new TypeError('Failed to fetch')), copy(), 4000);
+    await expect(res.text()).resolves.toBe('copie');
+  });
+
+  it('réseau trop lent avec une copie → la copie au bout du délai, sans attendre le navigateur', async () => {
+    vi.useFakeTimers();
+    const p = networkOrCopy(later(60_000, new Response('trop tard')), copy(), 4000);
+    await vi.advanceTimersByTimeAsync(4000);
+    await expect(p.then((r) => r.text())).resolves.toBe('copie');
+  });
+
+  it('sans copie → attend le réseau, quel que soit le délai ; son échec passe', async () => {
+    vi.useFakeTimers();
+    const p = networkOrCopy(later(10_000, new Response('lent')), null, 4000);
+    await vi.advanceTimersByTimeAsync(10_000);
+    await expect(p.then((r) => r.text())).resolves.toBe('lent');
+    vi.useRealTimers();
+    await expect(networkOrCopy(Promise.reject(new TypeError('Failed to fetch')), null, 4000)).rejects.toThrow('Failed to fetch');
   });
 });
