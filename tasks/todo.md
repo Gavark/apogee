@@ -21,6 +21,14 @@ Détail : `docs/superpowers/plans/2026-11-19-apogee-p1-fondations-cave.md`
 - [x] Task 13 step 6 : dépôt Gavark/apogee créé, PR #1 fusionnée, image GHCR publiée
 - [x] Vérification finale (revue de branche + vague de corrections)
 
+## Plan 2b — Sauvegarde automatique
+Détail : `docs/superpowers/plans/2026-11-20-apogee-p2b-sauvegarde.md`
+- [x] Task 1 : script `scripts/run-backup.sh` (paire base + photos vérifiée, rotation)
+- [x] Task 2 : conteneur `apogee-backup`, doc, essai réel (sauvegarde, rotation, restauration)
+- [x] Task 3 : copie vers Google Drive (`scripts/sync-backups-offsite.ps1`), tâche `\Apogee\Backup vers Google Drive` à 23:15 vers `G:\Mon Drive\Perso\Backup\Apogee`
+- [x] Revue finale + corrections (fichiers `.partial`, échec visible si `apk` ou les sauvegardes s'arrêtent)
+- [ ] Après le premier déploiement d'Apogée sur ce PC : vérifier `backups\sync-offsite.log` (lignes `OK:`)
+
 ## Plans suivants (à rédiger après le plan 1)
 - [ ] Plan 2 : analyse IA de l'étiquette — `docs/superpowers/plans/2026-11-20-apogee-p2-ia-etiquette.md`
   - [x] Task 1 : contrat IA, normalisation, prompt
