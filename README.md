@@ -1,5 +1,7 @@
 # Apogée
 
+[![CI](https://github.com/Gavark/apogee/actions/workflows/ci.yml/badge.svg)](https://github.com/Gavark/apogee/actions/workflows/ci.yml)
+
 Application web (PWA) auto-hébergée pour gérer sa cave à vin : inventaire des bouteilles, emplacements, stock par foyer. Pensée pour un usage domestique, sur votre propre serveur : ce n'est pas un service SaaS.
 
 Stack : SvelteKit, SQLite (Drizzle), français et anglais. Licence AGPL-3.0-only.
@@ -12,6 +14,8 @@ cp .env.example .env        # puis éditez .env : ORIGIN = URL publique (le déf
 mkdir -p data && chown 1000:1000 data   # le conteneur tourne avec l'utilisateur "node"
 docker compose up -d
 ```
+
+Le `docker-compose.yml` tire l'image publiée `ghcr.io/gavark/apogee:latest` (amd64 et arm64). Pour la construire localement, décommentez `build: .` et remplacez `image:` en conséquence.
 
 L'application écoute sur `127.0.0.1:3000`. Placez-la derrière un reverse proxy HTTPS (voir `Caddyfile.example`) et renseignez son URL publique dans `ORIGIN` : sans cela, les formulaires sont rejetés (403). Ne publiez pas le port 3000 en clair sur Internet.
 
@@ -48,7 +52,8 @@ Toutes les données tiennent dans un seul fichier SQLite. Voir [docs/BACKUP.md](
 
 ```bash
 git pull
-docker compose up -d --build
+docker compose pull
+docker compose up -d
 ```
 
 Les migrations sont additives et appliquées au démarrage. Faites une sauvegarde avant de mettre à jour.

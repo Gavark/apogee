@@ -10,7 +10,9 @@
 
 services:
   apogee:
-    build: .
+    image: ghcr.io/gavark/apogee:latest
+    # Pour construire l'image localement au lieu de la tirer depuis GHCR :
+    # build: .
     container_name: apogee
     restart: unless-stopped
     # Loopback only: your reverse proxy connects via 127.0.0.1:3000. Never

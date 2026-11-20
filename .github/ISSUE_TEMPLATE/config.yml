@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Faille de sécurité
+    url: https://github.com/Gavark/apogee/security/advisories/new
+    about: Signalez-la en privé ici, pas dans une issue publique.
+  - name: Question / discussion
+    url: https://github.com/Gavark/apogee/discussions
+    about: Pour les questions d'usage, d'hébergement ou "est-ce possible ?", utilisez les Discussions plutôt que les Issues.

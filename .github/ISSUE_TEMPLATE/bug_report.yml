@@ -1,0 +1,82 @@
+name: Signaler un bug
+description: Quelque chose ne fonctionne pas ou se comporte de façon inattendue.
+title: "[bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Merci de prendre le temps de le signaler. Remplissez le formulaire ci-dessous : une reproduction précise est plus facile à traiter qu'un texte libre.
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: Que s'est-il passé ?
+      description: Une ou deux phrases. Qu'est-ce que l'application a fait de travers ?
+      placeholder: "ex. « Ajouter un vin avec un millésime de 1850 crée la fiche au lieu d'être refusé. »"
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Qu'attendiez-vous à la place ?
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: Étapes pour reproduire
+      placeholder: |
+        1. Aller sur la page d'ajout d'un vin
+        2. Saisir ...
+        3. ...
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Version d'Apogée
+      description: "Lancez : docker inspect apogee --format '{{.Image}}'  (ou 'git describe' en développement)"
+      placeholder: "ghcr.io/gavark/apogee:v0.1.0  /  sha-3cdd777"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: deployment
+    attributes:
+      label: Comment l'exécutez-vous ?
+      options:
+        - "docker-compose.yml (image GHCR)"
+        - "docker-compose.yml (build local)"
+        - "Installation Docker personnalisée"
+        - "npm run dev (développement local)"
+    validations:
+      required: true
+
+  - type: input
+    id: browser
+    attributes:
+      label: Navigateur / appareil (si bug d'affichage)
+      placeholder: "Chrome 142 / Android 14 / Pixel 7"
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Journaux utiles
+      description: |
+        Serveur : `docker compose logs --tail=200 apogee`
+        Navigateur : sortie de la console des outils de développement
+      render: shell
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Avant d'envoyer
+      options:
+        - label: J'ai cherché dans les issues existantes et je n'ai pas trouvé de doublon.
+          required: true
+        - label: J'ai vérifié que j'utilise une version assez récente.
+          required: true
