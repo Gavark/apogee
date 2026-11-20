@@ -157,15 +157,19 @@ describe('submitAddWine', () => {
 
   it('champs texte > 200 caractères → invalid sur le champ, notes > 2000', () => {
     const long = (n: number) => 'x'.repeat(n);
-    for (const field of ['producer', 'cuvee', 'appellation', 'region', 'country', 'grapes', 'position']) {
+    for (const field of ['producer', 'cuvee', 'appellation', 'region', 'country', 'grapes']) {
       const r = submitAddWine(tdb.db, ctx, formOf({ locationId: String(loc), [field]: long(201) }), Y);
       expect(r).toEqual({ ok: false, error: { field, reason: 'invalid' } });
     }
+    const p = submitAddWine(tdb.db, ctx, formOf({ locationId: String(loc), position: long(101) }), Y);
+    expect(p).toEqual({ ok: false, error: { field: 'position', reason: 'invalid' } });
     const n = submitAddWine(tdb.db, ctx, formOf({ locationId: String(loc), notes: long(2001) }), Y);
     expect(n).toEqual({ ok: false, error: { field: 'notes', reason: 'invalid' } });
     expect(wines()).toHaveLength(0);
     const ok = submitAddWine(tdb.db, ctx, formOf({ locationId: String(loc), cuvee: long(200), notes: long(2000) }), Y);
     expect(ok.ok).toBe(true);
+    const okPos = submitAddWine(tdb.db, ctx, formOf({ locationId: String(loc), position: long(100) }), Y);
+    expect(okPos.ok).toBe(true);
   });
 
   it('lieu étranger → erreur locationId, rien enregistré', () => {
