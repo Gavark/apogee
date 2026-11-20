@@ -136,3 +136,24 @@ textarea.field-input { min-height: 96px; resize: vertical; }
 .badge-peak { background: var(--c-phase-peak-bg); color: var(--c-phase-peak-fg); }
 .badge-last_call { background: var(--c-phase-last-call-bg); color: var(--c-phase-last-call-fg); }
 .badge-past { background: var(--c-phase-past-bg); color: var(--c-phase-past-fg); }
+
+/* === Form-level feedback and auth pages === */
+.form-alert {
+  padding: var(--s-3) var(--s-4);
+  border: 1.5px solid var(--c-danger);
+  border-radius: var(--r-control);
+  color: var(--c-danger);
+  font-weight: var(--fw-medium);
+}
+.auth {
+  max-width: 420px;
+  margin: var(--s-6) auto 0;
+}
+.auth form {
+  display: grid;
+  gap: var(--s-4);
+}
+.auth .intro {
+  margin-bottom: var(--s-4);
+  color: var(--c-text-muted);
+}

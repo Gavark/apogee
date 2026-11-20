@@ -31,6 +31,23 @@ describe('invitations', () => {
     expect(inv.householdId).toBeNull();
   });
 
+  it('refuses a household invitation from a creator outside that household (non-admin)', () => {
+    const other = makeHousehold(tdb, 'Autre');
+    const outsider = makeUser(tdb, other, { email: 'o@x.test' });
+    expect(() => createInvitation(tdb.db, { createdBy: outsider, householdId: hid })).toThrow('forbidden');
+    expect(listInvitations(tdb.db, hid)).toHaveLength(0);
+  });
+
+  it('a non-admin member can invite into their own household', () => {
+    const member = makeUser(tdb, hid, { email: 'm@x.test' });
+    expect(createInvitation(tdb.db, { createdBy: member, householdId: hid }).householdId).toBe(hid);
+  });
+
+  it('an admin can invite into any household', () => {
+    const other = makeHousehold(tdb, 'Autre');
+    expect(createInvitation(tdb.db, { createdBy: adminId, householdId: other }).householdId).toBe(other);
+  });
+
   it('findUsableInvitation returns it if not used and not expired', () => {
     const inv = createInvitation(tdb.db, { createdBy: adminId, householdId: hid });
     expect(findUsableInvitation(tdb.db, inv.token)).not.toBeNull();

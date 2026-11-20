@@ -11,6 +11,7 @@ import {
 } from '$lib/server/auth/session';
 import { bootstrapAdmin, hasNoUsers } from '$lib/server/auth/bootstrap';
 import { resolveLocale, type Locale } from '$lib/server/auth/locale';
+import * as m from '$paraglide/messages';
 import { overwriteGetLocale, overwriteServerAsyncLocalStorage } from '$paraglide/runtime';
 
 const { db } = getDb();
@@ -73,6 +74,7 @@ export const handle: Handle = async ({ event, resolve }) => {
     path !== '/setup' &&
     path !== '/healthz' &&
     path !== '/api/locale' &&
+    path !== '/api/theme' &&
     !path.startsWith('/_app/') &&
     !/\.[a-z0-9]+$/i.test(path)
   ) {
@@ -89,9 +91,18 @@ export const handle: Handle = async ({ event, resolve }) => {
     const ip = event.getClientAddress();
     const limit = path === '/login' ? 30 : 5;
     if (!rateLimit(`${path}:${ip}`, limit, 15 * 60)) {
-      return new Response('Trop de tentatives, réessaie dans 15 minutes.', {
+      // No session lookup yet, so the locale comes from the same chain as
+      // below minus the user preference (?lang, cookie, Accept-Language).
+      const locale = resolveLocale({
+        urlLang: event.url.searchParams.get('lang'),
+        cookieLocale: event.cookies.get('locale') ?? null,
+        userLocale: null,
+        acceptLanguage: event.request.headers.get('accept-language')
+      });
+      const body = asyncStorage.run({ locale }, () => m.error_rate_limited());
+      return new Response(body, {
         status: 429,
-        headers: { 'Retry-After': '900' }
+        headers: { 'Retry-After': '900', 'Content-Type': 'text/plain; charset=utf-8' }
       });
     }
   }

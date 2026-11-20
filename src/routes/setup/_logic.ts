@@ -4,11 +4,13 @@ import { hashPassword, isStrongEnough } from '$lib/server/auth/password';
 import { hasNoUsers, insertHouseholdAndAdmin } from '$lib/server/auth/bootstrap';
 import { normalizeEmail, isValidEmail } from '$lib/server/auth/email';
 
+export const MAX_HOUSEHOLD_NAME_LEN = 100;
+
 type DB = ReturnType<typeof drizzle<typeof schema>>;
 
 export type SetupResult =
   | { ok: true; userId: number }
-  | { ok: false; reason: 'already-setup' | 'weak-password' | 'invalid-email' | 'household-name-required' };
+  | { ok: false; reason: 'already-setup' | 'weak-password' | 'invalid-email' | 'household-name-required' | 'household-name-too-long' };
 
 /**
  * Wizard-driven counterpart to bootstrapAdmin. Refuses if any user already
@@ -26,6 +28,7 @@ export async function setupFirstAdmin(
   if (!isValidEmail(email)) return { ok: false, reason: 'invalid-email' };
   if (!isStrongEnough(password)) return { ok: false, reason: 'weak-password' };
   if (!householdName) return { ok: false, reason: 'household-name-required' };
+  if (householdName.length > MAX_HOUSEHOLD_NAME_LEN) return { ok: false, reason: 'household-name-too-long' };
 
   const passwordHash = await hashPassword(password);
   // The hasNoUsers re-check inside the transaction guards against two parallel

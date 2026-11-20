@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { Snippet } from 'svelte';
-  import type { HTMLButtonAttributes } from 'svelte/elements';
+  import type { HTMLAnchorAttributes, HTMLButtonAttributes } from 'svelte/elements';
 
   type Props = HTMLButtonAttributes & {
     variant?: 'primary' | 'secondary' | 'ghost' | 'danger';
@@ -30,7 +30,7 @@
 </script>
 
 {#if href}
-  <a {href} class={cls}>{@render children()}</a>
+  <a {href} class={cls} {...(rest as HTMLAnchorAttributes)}>{@render children()}</a>
 {:else}
   <button {type} class={cls} {...rest}>{@render children()}</button>
 {/if}

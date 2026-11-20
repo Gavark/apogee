@@ -11,11 +11,13 @@ export const INVITATION_TTL_SEC = 7 * 24 * 60 * 60;
 
 export function createInvitation(db: DB, opts: { createdBy: number; householdId: number | null }) {
   const { createdBy, householdId } = opts;
-  // Only an admin may mint a household-less invitation (it creates a new household).
-  if (householdId === null) {
-    const creator = db.select({ isAdmin: schema.users.isAdmin }).from(schema.users)
-      .where(eq(schema.users.id, createdBy)).all()[0];
-    if (!creator || creator.isAdmin !== 1) throw new Error('forbidden');
+  const creator = db.select({ isAdmin: schema.users.isAdmin, householdId: schema.users.householdId })
+    .from(schema.users).where(eq(schema.users.id, createdBy)).all()[0];
+  if (!creator) throw new Error('forbidden');
+  // Only an admin may mint a household-less invitation (it creates a new
+  // household); a household invitation needs an admin or a member of it.
+  if (creator.isAdmin !== 1 && (householdId === null || creator.householdId !== householdId)) {
+    throw new Error('forbidden');
   }
   const t = Math.floor(Date.now() / 1000);
   const token = randomBytes(32).toString('base64url');

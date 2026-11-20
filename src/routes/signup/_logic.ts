@@ -3,6 +3,7 @@ import { eq } from 'drizzle-orm';
 import * as schema from '$lib/server/db/schema';
 import { hashPassword, isStrongEnough } from '$lib/server/auth/password';
 import { findUsableInvitation, markInvitationUsed } from '$lib/server/auth/invitations';
+import { MAX_HOUSEHOLD_NAME_LEN } from '../setup/_logic';
 import { normalizeEmail, isValidEmail } from '$lib/server/auth/email';
 
 type DB = ReturnType<typeof drizzle<typeof schema>>;
@@ -11,7 +12,7 @@ export type SignupResult =
   | { ok: true; userId: number }
   | {
       ok: false;
-      reason: 'bad-token' | 'weak-password' | 'duplicate-email' | 'invalid-email' | 'household-name-required';
+      reason: 'bad-token' | 'weak-password' | 'duplicate-email' | 'invalid-email' | 'household-name-required' | 'household-name-too-long';
     };
 
 /**
@@ -43,6 +44,9 @@ export async function signupWithToken(
     if (!inv) return { ok: false, reason: 'bad-token' as const };
     if (inv.householdId === null && !householdName) {
       return { ok: false, reason: 'household-name-required' as const };
+    }
+    if (inv.householdId === null && householdName.length > MAX_HOUSEHOLD_NAME_LEN) {
+      return { ok: false, reason: 'household-name-too-long' as const };
     }
 
     const existing = tx.select().from(schema.users).where(eq(schema.users.email, email)).all()[0];

@@ -69,6 +69,26 @@ describe('signupWithToken', () => {
     expect(used.used_at).toBeNull();
   });
 
+  it('household name over 100 characters -> household-name-too-long, nothing created', async () => {
+    const inv = invite(null);
+    const r = await signupWithToken(tdb.db, {
+      token: inv.token,
+      email: 'paul@x.test',
+      password: '1234567890',
+      householdName: 'a'.repeat(101)
+    });
+    expect(r).toEqual({ ok: false, reason: 'household-name-too-long' });
+    expect(nonAdminCount()).toBe(0);
+    expect(householdCount()).toBe(1);
+    const ok100 = await signupWithToken(tdb.db, {
+      token: inv.token,
+      email: 'paul@x.test',
+      password: '1234567890',
+      householdName: ` ${'a'.repeat(100)} `
+    });
+    expect(ok100.ok).toBe(true);
+  });
+
   it('a duplicate email on a household-less invitation leaves no orphan household', async () => {
     const inv = invite(null);
     const r = await signupWithToken(tdb.db, {

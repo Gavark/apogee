@@ -59,6 +59,14 @@ describe('setupFirstAdmin', () => {
     expect(hasNoUsers(tdb.db)).toBe(true);
   });
 
+  it('caps the household name at 100 characters (after trim)', async () => {
+    const tooLong = await setupFirstAdmin(tdb.db, { ...ok, householdName: 'a'.repeat(101) });
+    expect(tooLong).toEqual({ ok: false, reason: 'household-name-too-long' });
+    expect(hasNoUsers(tdb.db)).toBe(true);
+    const edge = await setupFirstAdmin(tdb.db, { ...ok, householdName: `  ${'a'.repeat(100)}  ` });
+    expect(edge.ok).toBe(true);
+  });
+
   it('normalises email to lowercase', async () => {
     await setupFirstAdmin(tdb.db, { ...ok, email: 'Mixed@X.Test' });
     expect((tdb.sqlite.prepare('SELECT email FROM users').get() as any).email).toBe('mixed@x.test');
