@@ -18,11 +18,20 @@ Détail : `docs/superpowers/plans/2026-11-19-apogee-p1-fondations-cave.md`
 - [x] Task 11 : « Quoi ouvrir », Cave et « Bue »
 - [x] Task 12 : Docker et documentation
 - [x] Task 13 : workflows CI/CD écrits
-- [ ] Task 13 step 6 : créer Gavark/apogee, pousser, PR (en attente d'accord)
+- [x] Task 13 step 6 : dépôt Gavark/apogee créé, PR #1 fusionnée, image GHCR publiée
 - [x] Vérification finale (revue de branche + vague de corrections)
 
 ## Plans suivants (à rédiger après le plan 1)
-- [ ] Plan 2 : analyse IA de l'étiquette
+- [ ] Plan 2 : analyse IA de l'étiquette — `docs/superpowers/plans/2026-11-20-apogee-p2-ia-etiquette.md`
+  - [x] Task 1 : contrat IA, normalisation, prompt
+  - [x] Task 2 : connecteurs Anthropic / compatible OpenAI, config
+  - [x] Task 3 : photos, analyses enregistrées, limite quotidienne
+  - [x] Task 4 : API d'analyse, redimensionnement
+  - [x] Task 5 : ajout par photo
+  - [x] Task 6 : fiche — photo, provenance, ré-estimation
+  - [x] Task 7 : admin IA, docs
+  - [x] Vérification finale (revue de branche + 12 corrections relues)
+  - [x] Essai réel avec une vraie clé : 1er appel refusé (400, enum + type tableau dans le schéma) → corrigé en anyOf ; étiquette de test Gigondas 2018 lue en 5,3 s (~1,4 ct) ; étiquette réelle Gevrey-Chambertin sans millésime lue en 6,2 s (~1,8 ct), confiance faible justifiée
 - [ ] Plan 3 : notifications (phases + rappel mensuel)
 - [ ] Plan 4 : réseau intermittent et resynchronisation
 
@@ -32,3 +41,9 @@ Détail : `docs/superpowers/plans/2026-11-19-apogee-p1-fondations-cave.md`
 - Décisions prises en cours de route : inscription sur invitation uniquement (pas de DISABLE_SIGNUP) ; ADDRESS_HEADER/XFF_DEPTH dans compose (derrière Caddy) ; fuseau des nouveaux comptes = TZ de l'instance ; job de test avant publication de l'image.
 - À reprendre au début du plan 4 : aligner la longueur max de « précision » (200 à l'ajout, 100 au déplacement) ; tests de rejeu supplémentaires (deux membres sur un même lot).
 - Petites dettes notées : doublons de code (upsert de lot, liste des couleurs, parsing d'id, statut d'invitation), pas d'UI de fuseau horaire, lots à 0 masqués sur la fiche.
+
+## Revue (plan 2, 2026-11-20)
+- 7 tâches relues une à une (6 boucles de correction), revue finale de branche (opus) puis 12 corrections relues.
+- `npm test` 431/431, `npm run check` 0 erreur, `npm run build` OK. Parcours vérifiés au navigateur avec un faux fournisseur compatible OpenAI.
+- Choix : modèle par défaut `claude-opus-5-5` (effort medium, max_tokens 16000, timeout 30 s, 1 nouvel essai), repli automatique `fallbacks: "default"`, sortie structurée JSON Schema (15/16 unions).
+- Reste : essai réel avec la clé de l'utilisateur ; README à préciser (la limite compte aussi les réponses facturées inexploitables) ; petites dettes notées dans le ledger (alerte en double, URL se terminant par ?/#).

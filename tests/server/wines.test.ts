@@ -14,11 +14,14 @@ import {
   listCellar,
   homeSections,
   getWineDetail,
+  applyAiWindow,
   type WineInput,
+  type AiProvenance,
   type CellarRow
 } from '../../src/lib/server/wines';
+import { applyAiFromForm } from '../../src/routes/app/wines/[id]/_logic';
 import { NotFoundError, type HouseholdCtx } from '../../src/lib/server/context';
-import type { Phase } from '../../src/lib/phase';
+import type { Phase, WindowYears } from '../../src/lib/phase';
 
 const NO_WINDOW = { drinkFrom: null, peakFrom: null, peakTo: null, drinkUntil: null };
 
@@ -205,6 +208,15 @@ describe('wines (db)', () => {
     expect(() => addStock(tdb.db, ctx, wineId, lot({ quantity: 0 }))).toThrow();
   });
 
+  it("addStock sur le vin d'un autre foyer → NotFoundError, photo non attachée", () => {
+    const { wineId } = createWine(tdb.db, ctx, wine(), lot());
+    expect(() => addStock(tdb.db, otherCtx, wineId, { locationId: otherLoc, position: '', quantity: 1 }, '2/x.jpg')).toThrow(
+      NotFoundError
+    );
+    expect(rowOf(wineId).labelPhoto).toBeNull();
+    expect(count('stockLots')).toBe(1);
+  });
+
   it('updateWine met à jour les champs et recalcule identityKey', () => {
     const { wineId } = createWine(tdb.db, ctx, wine(), lot());
     updateWine(tdb.db, ctx, wineId, wine({ cuvee: 'Pavillon Rouge', window: win(2020, 2035) }));
@@ -215,6 +227,168 @@ describe('wines (db)', () => {
     expect(row.identityKey).toBe(identityKey(wine({ cuvee: 'Pavillon Rouge' })));
     expect(findDuplicate(tdb.db, ctx, wine({ cuvee: 'Pavillon Rouge' }))?.id).toBe(wineId);
     expect(findDuplicate(tdb.db, ctx, wine())).toBeNull();
+  });
+
+  const prov = (over: Partial<AiProvenance> = {}): AiProvenance => ({
+    analysisId: 1,
+    photoPath: '1/abc.jpg',
+    window: win(2025, 2040),
+    confidence: 'medium',
+    rationale: 'Grand cru classé.',
+    model: 'm1',
+    ...over
+  });
+  const rowOf = (id: number) => tdb.db.select().from(tdb.schema.wines).where(eq(tdb.schema.wines.id, id)).get()!;
+
+  describe('applyAiWindow / fiche', () => {
+    const analysisRow = (c: HouseholdCtx, window: WindowYears, photoPath: string | null = null, isWineLabel = true) =>
+      tdb.db
+        .insert(tdb.schema.labelAnalyses)
+        .values({
+          householdId: c.householdId,
+          photoPath,
+          model: 'm2',
+          result: JSON.stringify({
+            isWineLabel, producer: 'Autre', cuvee: null, appellation: null, region: null, country: null,
+            color: 'white', vintage: 1999, grapes: null, formatCl: 150, window, confidence: 'high', rationale: 'Parce que.'
+          })
+        })
+        .returning({ id: tdb.schema.labelAnalyses.id })
+        .get().id;
+
+    it("applyAiWindow écrit fenêtre + ai_* sans toucher à l'identité", () => {
+      const { wineId } = createWine(tdb.db, ctx, wine({ window: win(2020, 2030) }), lot());
+      const before = rowOf(wineId);
+      const a = analysisRow(ctx, { drinkFrom: 2026, peakFrom: 2030, peakTo: 2036, drinkUntil: 2045 });
+      applyAiWindow(tdb.db, ctx, wineId, a);
+      expect(rowOf(wineId)).toMatchObject({
+        drinkFrom: 2026, peakFrom: 2030, peakTo: 2036, drinkUntil: 2045,
+        windowSource: 'ai', aiConfidence: 'high', aiRationale: 'Parce que.', aiModel: 'm2',
+        producer: before.producer, vintage: before.vintage, color: before.color, formatCl: before.formatCl,
+        identityKey: before.identityKey
+      });
+      expect(rowOf(wineId).aiAnalyzedAt).toBeGreaterThan(0);
+    });
+
+    it("applyAiWindow attache la photo de l'analyse si le vin n'en a pas, sans jamais écraser", () => {
+      const { wineId } = createWine(tdb.db, ctx, wine(), lot());
+      const w = { drinkFrom: 2026, peakFrom: null, peakTo: null, drinkUntil: 2040 };
+      applyAiWindow(tdb.db, ctx, wineId, analysisRow(ctx, w, '1/new.jpg'));
+      expect(rowOf(wineId).labelPhoto).toBe('1/new.jpg');
+      applyAiWindow(tdb.db, ctx, wineId, analysisRow(ctx, w, '1/other.jpg'));
+      expect(rowOf(wineId).labelPhoto).toBe('1/new.jpg');
+    });
+
+    it('applyAiWindow avec analyse sans fenêtre → RangeError, rien ne change', () => {
+      const { wineId } = createWine(tdb.db, ctx, wine({ window: win(2020, 2030) }), lot());
+      const before = rowOf(wineId);
+      expect(() => applyAiWindow(tdb.db, ctx, wineId, analysisRow(ctx, NO_WINDOW, '1/x.jpg'))).toThrow(RangeError);
+      expect(rowOf(wineId)).toEqual(before);
+    });
+
+    it("applyAiWindow : analyse qui n'est pas une étiquette → RangeError, rien ne change", () => {
+      const { wineId } = createWine(tdb.db, ctx, wine(), lot());
+      const before = rowOf(wineId);
+      expect(() => applyAiWindow(tdb.db, ctx, wineId, analysisRow(ctx, win(2026, 2040), null, false))).toThrow(RangeError);
+      expect(rowOf(wineId)).toEqual(before);
+    });
+
+    it('applyAiWindow : fenêtre incohérente avec le millésime ou partielle → RangeError', () => {
+      const { wineId } = createWine(tdb.db, ctx, wine({ vintage: 2015 }), lot());
+      const before = rowOf(wineId);
+      expect(() => applyAiWindow(tdb.db, ctx, wineId, analysisRow(ctx, win(2010, 2040)))).toThrow(RangeError);
+      expect(() => applyAiWindow(tdb.db, ctx, wineId, analysisRow(ctx, { ...NO_WINDOW, drinkFrom: 2026 }))).toThrow(RangeError);
+      expect(rowOf(wineId)).toEqual(before);
+    });
+
+    it('applyAiFromForm : analysisId non numérique → 400, étranger → NotFoundError, valide → 200', () => {
+      const { wineId } = createWine(tdb.db, ctx, wine(), lot());
+      const form = (v?: string) => {
+        const f = new FormData();
+        if (v !== undefined) f.set('analysisId', v);
+        return f;
+      };
+      expect(applyAiFromForm(tdb.db, ctx, wineId, form())).toEqual({ status: 400 });
+      expect(applyAiFromForm(tdb.db, ctx, wineId, form('abc'))).toEqual({ status: 400 });
+      expect(applyAiFromForm(tdb.db, ctx, wineId, form('99999999999999999999'))).toEqual({ status: 400 });
+      const foreign = analysisRow(otherCtx, win(2026, 2040));
+      expect(() => applyAiFromForm(tdb.db, ctx, wineId, form(String(foreign)))).toThrow(NotFoundError);
+      const empty = analysisRow(ctx, NO_WINDOW);
+      expect(applyAiFromForm(tdb.db, ctx, wineId, form(String(empty)))).toEqual({ status: 400 });
+      expect(rowOf(wineId).windowSource).toBe('manual');
+      const ok = analysisRow(ctx, win(2026, 2040));
+      expect(applyAiFromForm(tdb.db, ctx, wineId, form(String(ok)))).toEqual({ status: 200 });
+      expect(rowOf(wineId).windowSource).toBe('ai');
+    });
+
+    it("applyAiWindow : vin ou analyse d'un autre foyer → NotFoundError", () => {
+      const mine = createWine(tdb.db, ctx, wine(), lot()).wineId;
+      const theirs = createWine(tdb.db, otherCtx, wine(), lot({ locationId: otherLoc })).wineId;
+      const w = win(2026, 2040);
+      expect(() => applyAiWindow(tdb.db, ctx, theirs, analysisRow(ctx, w))).toThrow(NotFoundError);
+      expect(() => applyAiWindow(tdb.db, ctx, mine, analysisRow(otherCtx, w))).toThrow(NotFoundError);
+      expect(rowOf(mine).windowSource).toBe('manual');
+      expect(rowOf(theirs).windowSource).toBe('manual');
+    });
+
+    it("getWineDetail expose windowSource, aiConfidence, aiRationale, aiModel et hasPhoto, sans le chemin de la photo", () => {
+      const { wineId } = createWine(tdb.db, ctx, wine({ window: win(2025, 2040) }), lot(), prov());
+      const d = getWineDetail(tdb.db, ctx, wineId, 2026);
+      expect(d.wine).toMatchObject({ windowSource: 'ai', aiConfidence: 'medium', aiRationale: 'Grand cru classé.', aiModel: 'm1' });
+      expect(d.hasPhoto).toBe(true);
+      expect(d.wine).not.toHaveProperty('labelPhoto');
+      const bare = createWine(tdb.db, ctx, wine({ vintage: 2010 }), lot()).wineId;
+      expect(getWineDetail(tdb.db, ctx, bare, 2026).hasPhoto).toBe(false);
+    });
+
+    it('listCellar ne laisse pas partir le chemin de la photo', () => {
+      createWine(tdb.db, ctx, wine(), lot(), prov());
+      expect(listCellar(tdb.db, ctx, {}, 2026)[0].wine).not.toHaveProperty('labelPhoto');
+    });
+  });
+
+  it('createWine avec provenance et fenêtre identique → windowSource ai + confiance/justification/modèle', () => {
+    const { wineId } = createWine(tdb.db, ctx, wine({ window: win(2025, 2040) }), lot(), prov());
+    expect(rowOf(wineId)).toMatchObject({
+      windowSource: 'ai',
+      aiConfidence: 'medium',
+      aiRationale: 'Grand cru classé.',
+      aiModel: 'm1',
+      labelPhoto: '1/abc.jpg'
+    });
+    expect(rowOf(wineId).aiAnalyzedAt).toBeGreaterThan(0);
+  });
+
+  it('createWine avec fenêtre corrigée → manual, ai_* nuls, photo attachée', () => {
+    const { wineId } = createWine(tdb.db, ctx, wine({ window: win(2026, 2040) }), lot(), prov());
+    expect(rowOf(wineId)).toMatchObject({
+      windowSource: 'manual',
+      aiConfidence: null,
+      aiRationale: null,
+      aiModel: null,
+      aiAnalyzedAt: null,
+      labelPhoto: '1/abc.jpg'
+    });
+  });
+
+  it('createWine : fenêtre IA toute nulle → manual', () => {
+    const { wineId } = createWine(tdb.db, ctx, wine(), lot(), prov({ window: NO_WINDOW }));
+    expect(rowOf(wineId)).toMatchObject({ windowSource: 'manual', aiConfidence: null, labelPhoto: '1/abc.jpg' });
+  });
+
+  it('updateWine sans changer la fenêtre garde ai ; en la changeant → manual et ai_* nuls', () => {
+    const { wineId } = createWine(tdb.db, ctx, wine({ window: win(2025, 2040) }), lot(), prov());
+    updateWine(tdb.db, ctx, wineId, wine({ cuvee: 'Pavillon', window: win(2025, 2040) }));
+    expect(rowOf(wineId)).toMatchObject({ windowSource: 'ai', aiConfidence: 'medium', aiModel: 'm1' });
+    updateWine(tdb.db, ctx, wineId, wine({ window: win(2025, 2041) }));
+    expect(rowOf(wineId)).toMatchObject({
+      windowSource: 'manual',
+      aiConfidence: null,
+      aiRationale: null,
+      aiModel: null,
+      aiAnalyzedAt: null,
+      labelPhoto: '1/abc.jpg'
+    });
   });
 
   it('deleteWine supprime le vin, ses lots et ses consommations', () => {

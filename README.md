@@ -33,9 +33,48 @@ Les migrations de base de données sont appliquées automatiquement à chaque d�
 | `ADDRESS_HEADER` | `x-forwarded-for` (compose) | En-tête portant l'IP réelle du client, posé par le reverse proxy. Sert à la limite de tentatives par IP. |
 | `XFF_DEPTH` | `1` (compose) | Nombre de proxys de confiance devant l'application : lit la dernière entrée de `X-Forwarded-For`. |
 | `DATABASE_PATH` | `/data/apogee.sqlite` (image) | Chemin du fichier SQLite. Fixé dans l'image, à ne pas changer avec Docker. |
+| `AI_PROVIDER` | (vide) | `anthropic` ou `openai-compatible`. Vide : `anthropic` si `AI_API_KEY` est défini, sinon l'analyse IA est désactivée. |
+| `AI_API_KEY` | (vide) | Clé d'API du fournisseur. Facultative pour un serveur local (Ollama). |
+| `AI_MODEL` | `claude-opus-5-5` (Anthropic) | Modèle utilisé. Obligatoire avec `openai-compatible`. |
+| `AI_BASE_URL` | (vide) | Adresse de l'API, obligatoire avec `openai-compatible` (par exemple `https://api.openai.com/v1`). |
+| `AI_DAILY_LIMIT_PER_HOUSEHOLD` | `100` | Analyses facturées par jour et par foyer (réussies, ou réponse refusée / inexploitable). `0` = illimité. |
+| `PHOTOS_DIR` | `photos/` à côté de la base (`/data/photos` dans l'image) | Dossier des photos d'étiquettes, dans le volume de données. À ne pas changer avec Docker. |
+| `BODY_SIZE_LIMIT` | `8M` (image) | Taille maximale d'une requête, pour les photos. Fixé à `8M` dans l'image Docker. Hors Docker (`npm start`), définissez-la aussi : adapter-node limite à 512 Ko par défaut et la plupart des photos seraient refusées (erreur 413). |
 | `NODE_ENV` | `production` (image) | Fixé par l'image : cookies sécurisés, et la page `/dev/styleguide` répond 404. |
 
 `ADDRESS_HEADER` et `XFF_DEPTH` sont définis dans `docker-compose.yml` parce que le port est lié à `127.0.0.1`, derrière Caddy. Sans eux, tous les clients partageraient la même IP (celle du proxy) et la même limite de tentatives. **Si vous exposez le conteneur directement, sans reverse proxy, supprimez ces deux variables** : sinon un client pourrait forger `X-Forwarded-For` pour contourner la limite.
+
+## Analyse IA de l'étiquette
+
+Facultative. Quand elle est activée, vous photographiez une étiquette en ajoutant un vin : l'IA pré-remplit la fiche (producteur, appellation, millésime, fenêtre de dégustation estimée…) et vous corrigez avant d'enregistrer. Elle peut aussi ré-estimer la fenêtre d'un vin existant. Sans configuration, l'application fonctionne exactement comme avant.
+
+**Anthropic** : renseignez la clé, le modèle par défaut est `claude-opus-5-5`.
+
+```bash
+AI_API_KEY=sk-ant-...
+# AI_MODEL=claude-opus-5-5   # facultatif
+```
+
+**API compatible OpenAI** (OpenAI, Mistral, OpenRouter, Ollama local…) :
+
+```bash
+AI_PROVIDER=openai-compatible
+AI_BASE_URL=https://api.openai.com/v1
+AI_API_KEY=sk-...
+AI_MODEL=gpt-4o          # un modèle qui accepte les images
+```
+
+Avec Ollama sur l'hôte et Apogée dans Docker : `AI_BASE_URL=http://host.docker.internal:11434/v1`, sans clé, avec un modèle qui accepte les images. Sous Linux, ajoutez au service dans `docker-compose.yml` :
+
+```yaml
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+```
+
+- **Coût** : environ 1,5 à 2 centimes de dollar par étiquette avec le modèle par défaut (mesuré : ~2 300 tokens en entrée, 300 à 450 en sortie, 5 à 6 s), facturés par le fournisseur sur votre compte.
+- **Confidentialité** : la photo de l'étiquette est envoyée au fournisseur que vous avez choisi, avec les indices déjà saisis (producteur, millésime…) ; rien d'autre. Avec un Ollama local, rien ne quitte votre réseau. Les photos sont conservées sur votre serveur, dans `data/photos/`.
+- **Limite quotidienne** : `AI_DAILY_LIMIT_PER_HOUSEHOLD` (100 par défaut) protège votre budget ; chaque foyer a son compteur.
+- **Vérifier la configuration** : la page Administration affiche le fournisseur, le modèle et le nombre d'analyses du jour, avec un bouton de test (un appel réel, quelques centimes). La clé n'est jamais affichée.
 
 ## Premier lancement
 
@@ -50,7 +89,7 @@ L'inscription se fait uniquement sur invitation. Les membres d'un foyer invitent
 
 ## Sauvegardes
 
-Toutes les données tiennent dans un seul fichier SQLite. Voir [docs/BACKUP.md](docs/BACKUP.md).
+Les données tiennent dans un fichier SQLite et, si vous utilisez l'analyse IA, dans le dossier `data/photos/` (photos des étiquettes). Voir [docs/BACKUP.md](docs/BACKUP.md).
 
 ## Mise à jour
 
@@ -75,4 +114,4 @@ npm run check        # svelte-check et TypeScript
 
 ## À venir
 
-Analyse IA de l'étiquette, notifications, mode hors ligne.
+Notifications, mode hors ligne.

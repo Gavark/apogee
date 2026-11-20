@@ -11,10 +11,11 @@
   import LotList from '$lib/components/LotList.svelte';
   import PhaseBadge from '$lib/components/PhaseBadge.svelte';
   import Sheet from '$lib/components/Sheet.svelte';
+  import AiEstimateSheet from '$lib/components/AiEstimateSheet.svelte';
   import WindowTimeline from '$lib/components/WindowTimeline.svelte';
   import { newOpId, sendStockOps, SessionExpiredError } from '$lib/stock-client';
   import { showToast } from '$lib/toast.svelte';
-  import { colorLabel, formatLabel, wineTitle } from '$lib/wine-labels';
+  import { colorLabel, confidenceLabel, formatLabel, wineTitle } from '$lib/wine-labels';
   import { currentYear } from '$lib/phase';
   import type { CellarLot } from '$lib/server/wines';
   import type { OpResult, StockOp } from '$lib/server/stock';
@@ -33,6 +34,8 @@
   let moveQty = $state('1');
   let movePosition = $state('');
   let confirmingDelete = $state(false);
+  let photoOpen = $state(false);
+  let estimating = $state(false);
 
   const title = $derived(wineTitle(wine));
   const subtitle = $derived(
@@ -129,6 +132,12 @@
 </header>
 
 <div class="stack">
+  {#if detail.hasPhoto}
+    <button type="button" class="photo" aria-label={m.wine_photo_open()} onclick={() => (photoOpen = true)}>
+      <img src="/app/wines/{wine.id}/photo" alt={title} loading="lazy" />
+    </button>
+  {/if}
+
   <Card>
     <h2>{m.wine_window_title()}</h2>
     <WindowTimeline
@@ -139,8 +148,30 @@
       currentYear={year}
     />
     <p class="muted small">
-      {wine.drinkFrom === null ? m.wine_window_unknown() : m.wine_window_manual()}
+      {#if wine.windowSource === 'ai'}
+        {m.wine_window_ai({ confidence: confidenceLabel(wine.aiConfidence) })}
+      {:else if wine.drinkFrom === null}
+        {m.wine_window_unknown()}
+      {:else}
+        {m.wine_window_manual()}
+      {/if}
     </p>
+    {#if wine.windowSource === 'ai'}
+      {#if wine.aiRationale}
+        <details class="why">
+          <summary>{m.wine_window_ai_why()}</summary>
+          <p>{wine.aiRationale}</p>
+        </details>
+      {/if}
+      {#if wine.aiModel}<p class="muted tiny">{m.wine_window_ai_model({ model: wine.aiModel })}</p>{/if}
+    {/if}
+    {#if data.aiEnabled}
+      <div class="estimate">
+        <Button variant="secondary" size="sm" onclick={() => (estimating = true)}>
+          {m.wine_ai_reestimate()}
+        </Button>
+      </div>
+    {/if}
   </Card>
 
   <Card>
@@ -211,6 +242,20 @@
   </form>
 </Sheet>
 
+<AiEstimateSheet
+  open={estimating}
+  onclose={() => (estimating = false)}
+  wineId={wine.id}
+  current={{ drinkFrom: wine.drinkFrom, peakFrom: wine.peakFrom, peakTo: wine.peakTo, drinkUntil: wine.drinkUntil }}
+  currentYear={year}
+/>
+
+{#if detail.hasPhoto}
+  <Sheet open={photoOpen} onclose={() => (photoOpen = false)} title={m.wine_photo_title()}>
+    {#if photoOpen}<img class="photo-full" src="/app/wines/{wine.id}/photo" alt={title} />{/if}
+  </Sheet>
+{/if}
+
 <Sheet open={confirmingDelete} onclose={() => (confirmingDelete = false)} title={m.wine_delete_title()}>
   <p>{m.wine_delete_body()}</p>
   <form method="POST" action="?/delete" use:enhance class="sheet-form">
@@ -236,4 +281,12 @@
   .note { font-size: var(--fs-sm); }
   .actions { display: flex; gap: var(--s-2); justify-content: space-between; }
   .sheet-form { display: grid; gap: var(--s-3); }
+  .photo { padding: 0; border: 1px solid var(--c-border); border-radius: var(--r-card); background: var(--c-bg-card); overflow: hidden; cursor: zoom-in; }
+  .photo img { display: block; width: 100%; max-height: 240px; object-fit: contain; }
+  .photo-full { display: block; width: 100%; max-height: 70dvh; object-fit: contain; }
+  .why { margin-top: var(--s-2); font-size: var(--fs-sm); }
+  .why summary { cursor: pointer; min-height: var(--tap); display: flex; align-items: center; color: var(--c-accent); }
+  .why p { margin: 0 0 var(--s-2); overflow-wrap: anywhere; }
+  .tiny { font-size: var(--fs-xs, 0.75rem); margin-top: var(--s-1); }
+  .estimate { margin-top: var(--s-3); }
 </style>

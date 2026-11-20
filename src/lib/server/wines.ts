@@ -3,6 +3,10 @@ import type { BaseSQLiteDatabase } from 'drizzle-orm/sqlite-core';
 import * as schema from './db/schema';
 import { NotFoundError, type HouseholdCtx } from './context';
 import type { Wine } from './db/schema';
+import { getOwnedAnalysis } from './label-analyses';
+import { cleanupQuietly, deletePhoto, photosDir } from './photos';
+import type { AiConfidence } from './ai/types';
+import { WINE_FORMATS_CL, type Color } from '../wine-constants';
 import {
   HOME_SECTION_ORDER,
   computePhase,
@@ -16,7 +20,7 @@ type DB = BaseSQLiteDatabase<'sync', unknown, typeof schema>;
 
 const { wines, stockLots, locations, consumptions, users } = schema;
 
-export type Color = 'red' | 'white' | 'rose' | 'sparkling' | 'sweet' | 'fortified';
+export type { Color };
 
 export type WineInput = {
   producer: string | null;
@@ -33,11 +37,21 @@ export type WineInput = {
   notes: string | null;
 };
 
+/** What an accepted label analysis contributes to a new wine. */
+export type AiProvenance = {
+  analysisId: number;
+  photoPath: string | null;
+  window: WindowYears | null;
+  confidence: AiConfidence | null;
+  rationale: string | null;
+  model: string | null;
+};
+
 export type LotInput = { locationId: number; position: string; quantity: number };
 
 export type WineInputError = { field: string; reason: 'required' | 'invalid' | WindowError['reason'] };
 
-export const WINE_FORMATS_CL = [37, 50, 75, 150, 300, 600];
+export { WINE_FORMATS_CL };
 export const MIN_VINTAGE = 1900;
 export const MAX_LOT_QUANTITY = 10000;
 export const MAX_TEXT_LEN = 200;
@@ -118,7 +132,7 @@ function assertQuantity(quantity: number): void {
     throw new RangeError(`quantity must be an integer between 1 and ${MAX_LOT_QUANTITY}`);
 }
 
-function findOwnedWine(db: DB, ctx: HouseholdCtx, wineId: number): Wine {
+export function findOwnedWine(db: DB, ctx: HouseholdCtx, wineId: number): Wine {
   const row = db
     .select()
     .from(wines)
@@ -196,13 +210,28 @@ function upsertLot(db: DB, wineId: number, lot: LotInput): number {
     .get().id;
 }
 
+/** Strict field-by-field equality (null equals null). */
+function sameWindow(a: WindowYears, b: WindowYears): boolean {
+  return (
+    a.drinkFrom === b.drinkFrom && a.peakFrom === b.peakFrom && a.peakTo === b.peakTo && a.drinkUntil === b.drinkUntil
+  );
+}
+
+const hasYears = (w: WindowYears) =>
+  w.drinkFrom !== null || w.peakFrom !== null || w.peakTo !== null || w.drinkUntil !== null;
+
+const NO_AI = { aiConfidence: null, aiRationale: null, aiModel: null, aiAnalyzedAt: null } as const;
+
 export function createWine(
   db: DB,
   ctx: HouseholdCtx,
   input: WineInput,
-  lot: LotInput
+  lot: LotInput,
+  provenance: AiProvenance | null = null
 ): { wineId: number; lotId: number } {
   assertQuantity(lot.quantity);
+  // The window counts as the AI's only when it was proposed and kept as is.
+  const fromAi = !!provenance?.window && hasYears(provenance.window) && sameWindow(provenance.window, input.window);
   return db.transaction((tx) => {
     assertOwnedLocation(tx, ctx, lot.locationId);
     const wineId = tx
@@ -210,7 +239,16 @@ export function createWine(
       .values({
         ...wineColumns(input),
         householdId: ctx.householdId,
-        windowSource: 'manual',
+        windowSource: fromAi ? 'ai' : 'manual',
+        ...(fromAi
+          ? {
+              aiConfidence: provenance!.confidence,
+              aiRationale: provenance!.rationale,
+              aiModel: provenance!.model,
+              aiAnalyzedAt: Math.floor(Date.now() / 1000)
+            }
+          : NO_AI),
+        labelPhoto: provenance?.photoPath ?? null,
         createdBy: ctx.userId
       })
       .returning({ id: wines.id })
@@ -219,33 +257,92 @@ export function createWine(
   });
 }
 
-export function addStock(db: DB, ctx: HouseholdCtx, wineId: number, lot: LotInput): { lotId: number } {
+/** `photoPath` is attached only when the wine has no photo yet. */
+export function addStock(
+  db: DB,
+  ctx: HouseholdCtx,
+  wineId: number,
+  lot: LotInput,
+  photoPath: string | null = null
+): { lotId: number } {
   assertQuantity(lot.quantity);
   return db.transaction((tx) => {
-    findOwnedWine(tx, ctx, wineId);
+    const wine = findOwnedWine(tx, ctx, wineId);
     assertOwnedLocation(tx, ctx, lot.locationId);
+    if (photoPath && !wine.labelPhoto)
+      tx.update(wines)
+        .set({ labelPhoto: photoPath })
+        .where(and(eq(wines.id, wineId), eq(wines.householdId, ctx.householdId)))
+        .run();
     return { lotId: upsertLot(tx, wineId, lot) };
   });
 }
 
 export function updateWine(db: DB, ctx: HouseholdCtx, wineId: number, input: WineInput): void {
   db.transaction((tx) => {
-    findOwnedWine(tx, ctx, wineId);
+    const current = findOwnedWine(tx, ctx, wineId);
+    // An untouched window keeps its provenance; any change makes it the user's own. The photo stays.
+    const unchanged = sameWindow(windowOf(current), input.window);
     tx.update(wines)
-      .set({ ...wineColumns(input), windowSource: 'manual', updatedAt: Math.floor(Date.now() / 1000) })
+      .set({
+        ...wineColumns(input),
+        ...(unchanged ? {} : { windowSource: 'manual' as const, ...NO_AI }),
+        updatedAt: Math.floor(Date.now() / 1000)
+      })
       .where(and(eq(wines.id, wineId), eq(wines.householdId, ctx.householdId)))
       .run();
   });
 }
 
-export function deleteWine(db: DB, ctx: HouseholdCtx, wineId: number): void {
+/** Applies an analysis' proposed window to a wine as the AI's own; identity and stock are untouched. */
+export function applyAiWindow(db: DB, ctx: HouseholdCtx, wineId: number, analysisId: number): void {
   db.transaction((tx) => {
-    findOwnedWine(tx, ctx, wineId);
+    const wine = findOwnedWine(tx, ctx, wineId);
+    const found = getOwnedAnalysis(tx, ctx, analysisId);
+    if (!found.analysis?.isWineLabel) throw new RangeError('analysis is not a wine label');
+    const proposed = found.analysis.window;
+    if (!hasYears(proposed)) throw new RangeError('analysis has no window');
+    const check = validateWindow(proposed, wine.vintage ?? wine.acquiredYear);
+    if (check) throw new RangeError(`analysis window is not valid: ${check.reason}`);
+    const now = Math.floor(Date.now() / 1000);
+    tx.update(wines)
+      .set({
+        drinkFrom: proposed.drinkFrom,
+        peakFrom: proposed.peakFrom,
+        peakTo: proposed.peakTo,
+        drinkUntil: proposed.drinkUntil,
+        windowSource: 'ai',
+        aiConfidence: found.analysis.confidence,
+        aiRationale: found.analysis.rationale,
+        aiModel: found.model,
+        aiAnalyzedAt: now,
+        // Never replaces a photo the wine already has.
+        ...(found.photoPath && !wine.labelPhoto ? { labelPhoto: found.photoPath } : {}),
+        updatedAt: now
+      })
+      .where(and(eq(wines.id, wineId), eq(wines.householdId, ctx.householdId)))
+      .run();
+  });
+}
+
+export function deleteWine(
+  db: DB,
+  ctx: HouseholdCtx,
+  wineId: number,
+  photosDirPath: string = photosDir()
+): void {
+  const photo = db.transaction((tx) => {
+    const wine = findOwnedWine(tx, ctx, wineId);
     // lots and consumptions go with the wine (ON DELETE CASCADE)
     tx.delete(wines)
       .where(and(eq(wines.id, wineId), eq(wines.householdId, ctx.householdId)))
       .run();
+    if (!wine.labelPhoto) return null;
+    const stillUsed = tx.select({ id: wines.id }).from(wines).where(eq(wines.labelPhoto, wine.labelPhoto)).get();
+    return stillUsed ? null : wine.labelPhoto;
   });
+  // Only once the delete has committed; a photo another wine still points to is kept.
+  cleanupQuietly(() => deletePhoto(photosDirPath, photo));
 }
 
 export type CellarLot = {
@@ -255,7 +352,9 @@ export type CellarLot = {
   position: string;
   quantity: number;
 };
-export type CellarRow = { wine: Wine; phase: Phase; bottles: number; lots: CellarLot[] };
+/** The photo path stays on the server: the browser only learns whether there is one (`hasPhoto`). */
+export type PublicWine = Omit<Wine, 'labelPhoto'>;
+export type CellarRow = { wine: PublicWine; phase: Phase; bottles: number; lots: CellarLot[] };
 export type CellarFilter = {
   q?: string;
   locationId?: number;
@@ -264,7 +363,7 @@ export type CellarFilter = {
   finished?: boolean;
 };
 
-function windowOf(w: Wine): WindowYears {
+function windowOf(w: PublicWine): WindowYears {
   return { drinkFrom: w.drinkFrom, peakFrom: w.peakFrom, peakTo: w.peakTo, drinkUntil: w.drinkUntil };
 }
 
@@ -293,7 +392,8 @@ function loadLots(db: DB, wineIds: number[]): Map<number, CellarLot[]> {
   return byWine;
 }
 
-function toRow(wine: Wine, lots: CellarLot[], year: number): CellarRow {
+function toRow(full: Wine, lots: CellarLot[], year: number): CellarRow {
+  const { labelPhoto: _photo, ...wine } = full;
   return {
     wine,
     phase: computePhase(windowOf(wine), year),
@@ -362,6 +462,7 @@ export function homeSections(rows: CellarRow[]): { phase: Phase; rows: CellarRow
 }
 
 export type WineDetail = CellarRow & {
+  hasPhoto: boolean;
   consumptions: {
     id: number;
     consumedOn: string;
@@ -390,5 +491,5 @@ export function getWineDetail(db: DB, ctx: HouseholdCtx, wineId: number, year: n
     .where(eq(consumptions.wineId, wineId))
     .orderBy(desc(consumptions.consumedOn), desc(consumptions.id))
     .all();
-  return { ...toRow(wine, lots, year), consumptions: history };
+  return { ...toRow(wine, lots, year), hasPhoto: wine.labelPhoto !== null, consumptions: history };
 }

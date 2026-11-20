@@ -175,6 +175,82 @@ describe('submitAddWine', () => {
     expect(r).toEqual({ ok: false, error: { field: 'locationId', reason: 'invalid' } });
     expect(tdb.db.select().from(tdb.schema.wines).where(eq(tdb.schema.wines.householdId, ctx.householdId)).all()).toHaveLength(0);
   });
+
+  describe('analysisId', () => {
+    const analysisJson = JSON.stringify({
+      isWineLabel: true,
+      producer: 'Château Margaux',
+      window: { drinkFrom: 2025, peakFrom: null, peakTo: null, drinkUntil: 2040 },
+      confidence: 'high',
+      rationale: 'Premier cru.'
+    });
+    const mkAnalysis = (householdId: number, photoPath: string | null = '1/p.jpg') =>
+      tdb.db
+        .insert(tdb.schema.labelAnalyses)
+        .values({ householdId, photoPath, result: analysisJson, model: 'fake' })
+        .returning({ id: tdb.schema.labelAnalyses.id })
+        .get().id;
+
+    it('analysisId du foyer → vin créé, photo et provenance', () => {
+      const id = mkAnalysis(ctx.householdId);
+      const r = submitAddWine(
+        tdb.db,
+        ctx,
+        formOf({ locationId: String(loc), analysisId: String(id), drinkFrom: '2025', drinkUntil: '2040' }),
+        Y
+      );
+      expect(r.ok).toBe(true);
+      expect(wines()[0]).toMatchObject({
+        labelPhoto: '1/p.jpg',
+        windowSource: 'ai',
+        aiConfidence: 'high',
+        aiModel: 'fake'
+      });
+    });
+
+    it('fenêtre corrigée → manual mais photo gardée', () => {
+      const id = mkAnalysis(ctx.householdId);
+      submitAddWine(
+        tdb.db,
+        ctx,
+        formOf({ locationId: String(loc), analysisId: String(id), drinkFrom: '2026', drinkUntil: '2040' }),
+        Y
+      );
+      expect(wines()[0]).toMatchObject({ labelPhoto: '1/p.jpg', windowSource: 'manual', aiConfidence: null });
+    });
+
+    it("analysisId d'un autre foyer → erreur analysisId, aucun vin", () => {
+      const other = makeHousehold(tdb, 'Autre');
+      const id = mkAnalysis(other);
+      const r = submitAddWine(tdb.db, ctx, formOf({ locationId: String(loc), analysisId: String(id) }), Y);
+      expect(r).toEqual({ ok: false, error: { field: 'analysisId', reason: 'invalid' } });
+      expect(wines()).toHaveLength(0);
+      expect(lots()).toHaveLength(0);
+    });
+
+    it('analysisId non numérique → erreur analysisId', () => {
+      const r = submitAddWine(tdb.db, ctx, formOf({ locationId: String(loc), analysisId: 'abc' }), Y);
+      expect(r).toEqual({ ok: false, error: { field: 'analysisId', reason: 'invalid' } });
+    });
+
+    it("doublon + add-stock : photo attachée au vin existant s'il n'en a pas, sinon conservée", () => {
+      const first = submitAddWine(tdb.db, ctx, formOf({ locationId: String(loc) }), Y);
+      if (!first.ok) throw new Error('first add failed');
+      const a1 = mkAnalysis(ctx.householdId, '1/one.jpg');
+      const again = formOf({ locationId: String(loc), analysisId: String(a1), confirmDuplicate: 'add-stock' });
+      submitAddWine(tdb.db, ctx, again, Y);
+      expect(wines()[0].labelPhoto).toBe('1/one.jpg');
+      const a2 = mkAnalysis(ctx.householdId, '1/two.jpg');
+      submitAddWine(
+        tdb.db,
+        ctx,
+        formOf({ locationId: String(loc), analysisId: String(a2), confirmDuplicate: 'add-stock' }),
+        Y
+      );
+      expect(wines()[0].labelPhoto).toBe('1/one.jpg');
+      expect(wines()).toHaveLength(1);
+    });
+  });
 });
 
 describe('validateParsedWine', () => {

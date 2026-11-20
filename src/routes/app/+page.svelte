@@ -6,8 +6,14 @@
   import EmptyState from '$lib/components/EmptyState.svelte';
   import PhaseBadge from '$lib/components/PhaseBadge.svelte';
   import WineRow from '$lib/components/WineRow.svelte';
+  import AiEstimateSheet from '$lib/components/AiEstimateSheet.svelte';
+  import type { CellarRow } from '$lib/server/wines';
 
   let { data } = $props();
+
+  // The wine being estimated (a snapshot of its row: the sheet only needs its id and current window).
+  let estimating = $state<CellarRow | null>(null);
+  const estimate = $derived(data.aiEnabled ? (row: CellarRow) => (estimating = row) : undefined);
 </script>
 
 <svelte:head><title>{m.home_title()}</title></svelte:head>
@@ -33,7 +39,7 @@
             <CaretDown class="caret" size={18} aria-hidden="true" />
           </summary>
           <ul class="rows">
-            {#each section.rows as row (row.wine.id)}<WineRow {row} />{/each}
+            {#each section.rows as row (row.wine.id)}<WineRow {row} onestimate={estimate} />{/each}
           </ul>
         </details>
       {:else}
@@ -43,12 +49,27 @@
             <span class="count">{section.rows.length}</span>
           </h2>
           <ul class="rows">
-            {#each section.rows as row (row.wine.id)}<WineRow {row} />{/each}
+            {#each section.rows as row (row.wine.id)}<WineRow {row} onestimate={estimate} />{/each}
           </ul>
         </section>
       {/if}
     {/each}
   </div>
+{/if}
+
+{#if estimating}
+  <AiEstimateSheet
+    open
+    onclose={() => (estimating = null)}
+    wineId={estimating.wine.id}
+    current={{
+      drinkFrom: estimating.wine.drinkFrom,
+      peakFrom: estimating.wine.peakFrom,
+      peakTo: estimating.wine.peakTo,
+      drinkUntil: estimating.wine.drinkUntil
+    }}
+    currentYear={data.year}
+  />
 {/if}
 
 <style>
