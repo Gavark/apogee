@@ -18,3 +18,7 @@ export async function analyzeLabel(args: { photo?: Blob; hints?: LabelHints; win
   if (!res.ok) throw new Error(`label analysis failed: HTTP ${res.status}`);
   return (await res.json()) as AnalysisOutcome;
 }
+
+/** The photo never reached storage (network/HTTP/storage failure): nothing was kept, so it must not look attached. */
+export const isLostUpload = (o: AnalysisOutcome): boolean =>
+  !o.ok && o.analysisId === null && o.error !== 'invalid_photo';

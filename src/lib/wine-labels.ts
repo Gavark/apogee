@@ -44,7 +44,13 @@ const REESTIMATE_ERRORS: Record<string, () => string> = {
 export const reestimateErrorMessage = (code: string): string => (REESTIMATE_ERRORS[code] ?? m.ai_est_error_default)();
 
 export const confidenceLabel = (c: string | null): string =>
-  c === 'high' ? m.add_ai_confidence_high() : c === 'medium' ? m.add_ai_confidence_medium() : m.add_ai_confidence_low();
+  c === 'high'
+    ? m.add_ai_confidence_high()
+    : c === 'medium'
+      ? m.add_ai_confidence_medium()
+      : c === 'low'
+        ? m.add_ai_confidence_low()
+        : m.add_ai_confidence_unknown();
 
 export const colorLabel = (c: string | null): string | null =>
   COLOR_OPTIONS.find((o) => o.value === c)?.label() ?? null;

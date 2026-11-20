@@ -3,8 +3,9 @@
   import Camera from 'phosphor-svelte/lib/Camera';
   import * as m from '$paraglide/messages';
   import Button from '$lib/components/Button.svelte';
+  import Card from '$lib/components/Card.svelte';
   import { resizeImage } from '$lib/image-resize';
-  import { analyzeLabel } from '$lib/label-client';
+  import { analyzeLabel, isLostUpload } from '$lib/label-client';
   import { SessionExpiredError } from '$lib/stock-client';
   import type { AnalysisOutcome } from '$lib/server/label-analyses';
 
@@ -26,14 +27,12 @@
   let alive = true;
   onDestroy(() => (alive = false));
 
-  async function picked(e: Event) {
-    const input = e.currentTarget as HTMLInputElement;
-    const file = input.files?.[0];
-    input.value = '';
-    if (!file || busy) return;
+  // A photo that never reached storage stays here (not attached anywhere) until it is resent or replaced.
+  let failedBlob: Blob | null = $state(null);
+
+  async function send(blob: Blob) {
     busy = true;
     try {
-      const blob = await resizeImage(file, 1600, 0.8);
       const preview = URL.createObjectURL(blob);
       let outcome: AnalysisOutcome;
       try {
@@ -45,11 +44,32 @@
         }
         outcome = { ok: false, analysisId: null, error: 'unavailable' };
       }
+      if (isLostUpload(outcome)) {
+        URL.revokeObjectURL(preview);
+        if (alive) failedBlob = blob;
+        return;
+      }
+      failedBlob = null;
       if (alive) onresult(outcome, preview);
       else URL.revokeObjectURL(preview);
     } finally {
       busy = false;
     }
+  }
+
+  async function picked(e: Event) {
+    const input = e.currentTarget as HTMLInputElement;
+    const file = input.files?.[0];
+    input.value = '';
+    if (!file || busy) return;
+    busy = true;
+    let blob: Blob;
+    try {
+      blob = await resizeImage(file, 1600, 0.8);
+    } finally {
+      busy = false;
+    }
+    await send(blob);
   }
 </script>
 
@@ -73,8 +93,20 @@
   onchange={picked}
 />
 
+{#snippet failure()}
+  {#if failedBlob}
+    <Card role="alert">
+      <div class="failed">
+        <p>{m.add_ai_error_send_failed()}</p>
+        <Button size="sm" disabled={busy} onclick={() => failedBlob && send(failedBlob)}>{m.add_ai_retry()}</Button>
+      </div>
+    </Card>
+  {/if}
+{/snippet}
+
 {#if variant === 'full'}
   <div class="capture">
+    {@render failure()}
     <p class="hint">{m.add_ai_hint()}</p>
     <Button block disabled={busy} onclick={() => cameraInput?.click()}>
       <Camera size={22} weight="bold" aria-hidden="true" />{m.add_ai_take()}
@@ -88,11 +120,14 @@
     {#if busy}<p class="busy" role="status">{m.add_ai_analyzing()}</p>{/if}
   </div>
 {:else}
+  <div class="attach-wrap">
+    {@render failure()}
   <div class="attach">
     <Button variant="secondary" size="sm" disabled={busy} onclick={() => galleryInput?.click()}>
       <Camera size={18} aria-hidden="true" />{attachLabel ?? m.add_ai_attach()}
     </Button>
     {#if busy}<span class="busy" role="status">{m.add_ai_analyzing()}</span>{/if}
+  </div>
   </div>
 {/if}
 
@@ -102,5 +137,8 @@
   .hint { margin: 0; color: var(--c-text-muted); }
   .links { display: flex; flex-wrap: wrap; justify-content: center; gap: var(--s-2); }
   .busy { margin: 0; text-align: center; color: var(--c-text-muted); }
+  .failed { display: grid; gap: var(--s-2); justify-items: start; }
+  .failed p { margin: 0; }
+  .attach-wrap { display: grid; gap: var(--s-3); }
   .attach { display: flex; align-items: center; gap: var(--s-3); }
 </style>
