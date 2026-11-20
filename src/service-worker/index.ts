@@ -64,8 +64,10 @@ self.addEventListener('push', (event) => {
       icon: '/icon-192.png',
       badge: '/icon-192.png',
       tag: typeof p.tag === 'string' && p.tag ? p.tag : 'apogee',
+      // A fixed tag would otherwise replace yesterday's notification silently.
+      renotify: true, // not yet in the DOM lib typings
       data: { url: safeNotificationUrl(p.url, self.location.origin) }
-    })
+    } as NotificationOptions)
   );
 });
 
