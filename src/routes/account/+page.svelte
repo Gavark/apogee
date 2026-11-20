@@ -4,6 +4,7 @@
   import SignOut from 'phosphor-svelte/lib/SignOut';
   import UsersThree from 'phosphor-svelte/lib/UsersThree';
   import ShieldCheck from 'phosphor-svelte/lib/ShieldCheck';
+  import MapPin from 'phosphor-svelte/lib/MapPin';
   import * as m from '$paraglide/messages';
   import BottomNav from '$lib/components/BottomNav.svelte';
   import Button from '$lib/components/Button.svelte';
@@ -33,6 +34,14 @@
       <span class="nav-text">
         <strong>{data.account.householdName}</strong>
         <span class="muted">{m.account_household_link()}</span>
+      </span>
+      <CaretRight size={18} aria-hidden="true" />
+    </a>
+    <a class="nav-card card" href="/app/locations">
+      <MapPin size={24} weight="duotone" aria-hidden="true" />
+      <span class="nav-text">
+        <strong>{m.loc_page_title()}</strong>
+        <span class="muted">{m.account_locations_link()}</span>
       </span>
       <CaretRight size={18} aria-hidden="true" />
     </a>

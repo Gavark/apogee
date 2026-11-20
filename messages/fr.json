@@ -396,5 +396,12 @@
   "cave_empty_finished": "Aucune bouteille bue pour l'instant.",
   "cave_reset": "Réinitialiser",
   "drink_toast": "Bue · {wine}",
-  "drink_empty_lot": "Plus de bouteille à cet endroit"
+  "drink_empty_lot": "Plus de bouteille à cet endroit",
+  "error_title": "Erreur {status}",
+  "error_not_found": "Cette page n'existe pas.",
+  "error_generic": "Une erreur est survenue. Réessayez dans un instant.",
+  "error_back_app": "Retour à ma cave",
+  "error_back_login": "Retour à la connexion",
+  "account_locations_link": "Où sont rangées vos bouteilles",
+  "cave_manage_locations": "Gérer les lieux"
 }

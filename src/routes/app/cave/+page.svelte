@@ -2,6 +2,7 @@
   import { goto } from '$app/navigation';
   import { page } from '$app/state';
   import Rows from 'phosphor-svelte/lib/Rows';
+  import MapPin from 'phosphor-svelte/lib/MapPin';
   import * as m from '$paraglide/messages';
   import Button from '$lib/components/Button.svelte';
   import EmptyState from '$lib/components/EmptyState.svelte';
@@ -43,6 +44,9 @@
 <header class="head">
   <h1>{m.cave_title()}</h1>
   <p class="muted">{m.wine_bottle_count({ count: data.total })}</p>
+  <Button variant="ghost" size="sm" href="/app/locations">
+    <MapPin size={16} aria-hidden="true" />{m.cave_manage_locations()}
+  </Button>
 </header>
 
 <form
@@ -106,6 +110,7 @@
 
 <style>
   .head { margin-bottom: var(--s-3); }
+  .head :global(.btn) { margin-top: var(--s-1); margin-left: calc(-1 * var(--s-2)); }
   h1 { margin: 0; }
   .muted { margin: 0; color: var(--c-text-muted); }
   .filters { display: grid; gap: var(--s-3); margin-bottom: var(--s-4); }

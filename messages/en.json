@@ -396,5 +396,12 @@
   "cave_empty_finished": "No bottle drunk yet.",
   "cave_reset": "Reset",
   "drink_toast": "Drunk · {wine}",
-  "drink_empty_lot": "No bottle left at this spot"
+  "drink_empty_lot": "No bottle left at this spot",
+  "error_title": "Error {status}",
+  "error_not_found": "This page doesn't exist.",
+  "error_generic": "Something went wrong. Please try again in a moment.",
+  "error_back_app": "Back to my cellar",
+  "error_back_login": "Back to sign in",
+  "account_locations_link": "Where your bottles are kept",
+  "cave_manage_locations": "Manage locations"
 }
