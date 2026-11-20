@@ -49,12 +49,12 @@ docker compose stop apogee
 rm -f data/apogee.sqlite-wal data/apogee.sqlite-shm
 cp backups/apogee-<DATE>.sqlite data/apogee.sqlite
 chown 1000:1000 data/apogee.sqlite
-tar -xzf backups/apogee-photos-<DATE>.tar.gz -C data   # recrée data/photos/ ; facultatif sans analyse IA
-chown -R 1000:1000 data/photos
+tar -xzf backups/apogee-photos-<DATE_PHOTOS>.tar.gz -C data   # recrée data/photos/ ; facultatif sans analyse IA
+[ -d data/photos ] && chown -R 1000:1000 data/photos
 docker compose start apogee
 ```
 
-Restaurez les photos pendant que le conteneur est arrêté, avec la même sauvegarde datée que la base : une fiche pointe vers sa photo par son nom de fichier. Si `data/photos/` contient déjà des fichiers, l'extraction les complète ou les remplace par ceux de la sauvegarde.
+Restaurez les photos pendant que le conteneur est arrêté, avec l'archive des photos de la même nuit que la base (les deux tâches cron ci-dessus ont des heures différentes, donc deux `<DATE>` distinctes) : une fiche pointe vers sa photo par son nom de fichier. Si `data/photos/` contient déjà des fichiers, l'extraction les complète ou les remplace par ceux de la sauvegarde.
 
 Supprimez toujours les fichiers `-wal` et `-shm` avant la copie : la base est en mode WAL, et un WAL résiduel rejoué sur le fichier restauré pourrait le corrompre ou mélanger d'anciennes données.
 

@@ -39,7 +39,7 @@ Les migrations de base de données sont appliquées automatiquement à chaque d�
 | `AI_BASE_URL` | (vide) | Adresse de l'API, obligatoire avec `openai-compatible` (par exemple `https://api.openai.com/v1`). |
 | `AI_DAILY_LIMIT_PER_HOUSEHOLD` | `100` | Analyses réussies par jour et par foyer. `0` = illimité. |
 | `PHOTOS_DIR` | `photos/` à côté de la base (`/data/photos` dans l'image) | Dossier des photos d'étiquettes, dans le volume de données. À ne pas changer avec Docker. |
-| `BODY_SIZE_LIMIT` | `8M` (image) | Taille maximale d'une requête, pour les photos. Fixé dans l'image. |
+| `BODY_SIZE_LIMIT` | `8M` (image) | Taille maximale d'une requête, pour les photos. Fixé à `8M` dans l'image Docker. Hors Docker (`npm start`), définissez-la aussi : adapter-node limite à 512 Ko par défaut et la plupart des photos seraient refusées (erreur 413). |
 | `NODE_ENV` | `production` (image) | Fixé par l'image : cookies sécurisés, et la page `/dev/styleguide` répond 404. |
 
 `ADDRESS_HEADER` et `XFF_DEPTH` sont définis dans `docker-compose.yml` parce que le port est lié à `127.0.0.1`, derrière Caddy. Sans eux, tous les clients partageraient la même IP (celle du proxy) et la même limite de tentatives. **Si vous exposez le conteneur directement, sans reverse proxy, supprimez ces deux variables** : sinon un client pourrait forger `X-Forwarded-For` pour contourner la limite.
@@ -71,7 +71,7 @@ Avec Ollama sur l'hôte et Apogée dans Docker : `AI_BASE_URL=http://host.docker
       - "host.docker.internal:host-gateway"
 ```
 
-- **Coût** : de l'ordre de 2 à 3 centimes par étiquette avec le modèle par défaut, facturés par le fournisseur sur votre compte.
+- **Coût** : de l'ordre de 2 à 5 centimes par étiquette avec le modèle par défaut, facturés par le fournisseur sur votre compte.
 - **Confidentialité** : la photo de l'étiquette est envoyée au fournisseur que vous avez choisi, avec les indices déjà saisis (producteur, millésime…) ; rien d'autre. Avec un Ollama local, rien ne quitte votre réseau. Les photos sont conservées sur votre serveur, dans `data/photos/`.
 - **Limite quotidienne** : `AI_DAILY_LIMIT_PER_HOUSEHOLD` (100 par défaut) protège votre budget ; chaque foyer a son compteur.
 - **Vérifier la configuration** : la page Administration affiche le fournisseur, le modèle et le nombre d'analyses du jour, avec un bouton de test (un appel réel, quelques centimes). La clé n'est jamais affichée.
