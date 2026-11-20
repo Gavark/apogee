@@ -7,6 +7,7 @@
   import { resizeImage } from '$lib/image-resize';
   import { analyzeLabel, isLostUpload } from '$lib/label-client';
   import { SessionExpiredError } from '$lib/stock-client';
+  import { network } from '$lib/offline/online.svelte';
   import type { AnalysisOutcome } from '$lib/server/label-analyses';
 
   type Props = {
@@ -31,6 +32,7 @@
   let failedBlob: Blob | null = $state(null);
 
   async function send(blob: Blob) {
+    if (!network.online) return; // the banner says why; the photo stays in failedBlob / the picker
     busy = true;
     try {
       const preview = URL.createObjectURL(blob);
@@ -98,7 +100,7 @@
     <Card role="alert">
       <div class="failed">
         <p>{m.add_ai_error_send_failed()}</p>
-        <Button size="sm" disabled={busy} onclick={() => failedBlob && send(failedBlob)}>{m.add_ai_retry()}</Button>
+        <Button size="sm" disabled={busy || !network.online} onclick={() => failedBlob && send(failedBlob)}>{m.add_ai_retry()}</Button>
       </div>
     </Card>
   {/if}
@@ -108,11 +110,11 @@
   <div class="capture">
     {@render failure()}
     <p class="hint">{m.add_ai_hint()}</p>
-    <Button block disabled={busy} onclick={() => cameraInput?.click()}>
+    <Button block disabled={busy || !network.online} onclick={() => cameraInput?.click()}>
       <Camera size={22} weight="bold" aria-hidden="true" />{m.add_ai_take()}
     </Button>
     <div class="links">
-      <Button variant="ghost" disabled={busy} onclick={() => galleryInput?.click()}>{m.add_ai_pick()}</Button>
+      <Button variant="ghost" disabled={busy || !network.online} onclick={() => galleryInput?.click()}>{m.add_ai_pick()}</Button>
       {#if onskip}
         <Button variant="ghost" disabled={busy} onclick={onskip}>{m.add_ai_skip()}</Button>
       {/if}
@@ -123,7 +125,7 @@
   <div class="attach-wrap">
     {@render failure()}
   <div class="attach">
-    <Button variant="secondary" size="sm" disabled={busy} onclick={() => galleryInput?.click()}>
+    <Button variant="secondary" size="sm" disabled={busy || !network.online} onclick={() => galleryInput?.click()}>
       <Camera size={18} aria-hidden="true" />{attachLabel ?? m.add_ai_attach()}
     </Button>
     {#if busy}<span class="busy" role="status">{m.add_ai_analyzing()}</span>{/if}

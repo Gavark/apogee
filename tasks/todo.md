@@ -47,7 +47,15 @@ Détail : `docs/superpowers/plans/2026-11-20-apogee-p2b-sauvegarde.md`
   - [x] Task 4 : réglages, appareils, service worker
   - [x] Vérification finale (revue de branche + corrections relues ; push réel via FCM vérifié dans Chromium)
   - [ ] Essai sur le navigateur de l'utilisateur après déploiement
-- [ ] Plan 4 : réseau intermittent et resynchronisation
+- [ ] Plan 4 : réseau intermittent — `docs/superpowers/plans/2026-11-20-apogee-p4-hors-ligne.md`
+  - [x] Task 1 : file d'opérations, surcouche optimiste (+ précision max 100)
+  - [x] Task 2 : envoi via la file, synchronisation
+  - [x] Task 3 : service worker (lecture hors ligne, Background Sync, cloisonnement par compte)
+  - [x] Task 4 : écrans réseau requis, docs, vérification hors ligne
+  - [x] Vérification finale (revue de branche + 2 vagues de corrections relues ; deux essais hors ligne au navigateur)
+  - [x] Dependabot : configuré (alertes, correctifs de sécurité, `dependabot.yml`), 0 alerte, `npm audit` 0
+  - [ ] 6 PR Dependabot de mises à jour majeures à trancher (session dédiée)
+  - [ ] Essai hors ligne sur le téléphone de l'utilisateur après déploiement (démarrage depuis l'icône sans réseau)
 
 ## Revue (plan 1, 2026-11-20)
 - 13 tâches, chacune relue (spec + qualité) ; 6 boucles de correction ; revue finale de branche (opus) puis une vague de 13 corrections relue.
@@ -61,3 +69,9 @@ Détail : `docs/superpowers/plans/2026-11-20-apogee-p2b-sauvegarde.md`
 - `npm test` 431/431, `npm run check` 0 erreur, `npm run build` OK. Parcours vérifiés au navigateur avec un faux fournisseur compatible OpenAI.
 - Choix : modèle par défaut `claude-opus-5-5` (effort medium, max_tokens 16000, timeout 30 s, 1 nouvel essai), repli automatique `fallbacks: "default"`, sortie structurée JSON Schema (15/16 unions).
 - Reste : essai réel avec la clé de l'utilisateur ; README à préciser (la limite compte aussi les réponses facturées inexploitables) ; petites dettes notées dans le ledger (alerte en double, URL se terminant par ?/#).
+
+## Revue (plan 4, 2026-11-20)
+- 4 tâches relues une à une (6 boucles de correction), revue finale de branche (opus), puis 7 corrections + 2 dernières, relues.
+- `npm test` 708/708, `npm run check` 0 erreur, `npm run build` OK. Deux essais réels hors ligne (Chromium, base jetable) : lecture en cache + bandeau, démarrage depuis `/` sans réseau, « Bue » optimiste et resynchro sans doublon, annulation avant envoi et annulation différée conservée après fermeture, avertissement à la déconnexion, cache vidé et non servi à un autre compte.
+- Choix : en-tête `x-apogee-user` refusé par le serveur (409) s'il ne correspond pas à la session ; annulation d'un geste déjà tenté = rejeu puis opération inverse ; délai de 4 s seulement à l'ouverture des pages ; `start_url` `/app` avec `id` `/`.
+- Petites dettes notées : résultats de Background Sync non affichés si aucun onglet ouvert, déplacement hors ligne vers un emplacement non affiché, cache de pages sans limite, date du bandeau = dernier chargement en ligne, un geste rejeté indéfiniment (5xx) bloque la file.

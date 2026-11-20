@@ -445,6 +445,45 @@
   "cave_reset": "Réinitialiser",
   "drink_toast": "Bue · {wine}",
   "drink_empty_lot": "Plus de bouteille à cet endroit",
+  "offline_saved": "Enregistré, sera synchronisé",
+  "offline_undo_deferred": "L'annulation sera appliquée à la synchronisation",
+  "offline_op_failed": "Une opération n'a pas pu être appliquée",
+  "offline_pending": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} geste en attente",
+        "countPlural=*": "{count} gestes en attente"
+      }
+    }
+  ],
+  "network_required": "Cet écran nécessite le réseau",
+  "offline_banner": "Hors ligne",
+  "offline_banner_since": "Hors ligne — données du {date}",
+  "logout_unsynced_title": "Gestes non synchronisés",
+  "logout_unsynced_body": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} geste n'est pas encore synchronisé : restez connecté et reconnectez-vous au réseau pour l'envoyer",
+        "countPlural=*": "{count} gestes ne sont pas encore synchronisés : restez connecté et reconnectez-vous au réseau pour les envoyer"
+      }
+    }
+  ],
+  "logout_anyway": "Se déconnecter quand même",
+  "logout_stay": "Rester connecté",
   "error_title": "Erreur {status}",
   "error_not_found": "Cette page n'existe pas.",
   "error_generic": "Une erreur est survenue. Réessayez dans un instant.",

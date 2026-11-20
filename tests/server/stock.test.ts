@@ -1,10 +1,14 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { eq } from 'drizzle-orm';
 import { makeTestDb } from '../helpers/db';
 import { makeHousehold, makeUser, makeLocation } from '../helpers/fixtures';
 import { applyStockOps, parseStockOps, type StockOp } from '../../src/lib/server/stock';
 import type { HouseholdCtx } from '../../src/lib/server/context';
 import { POST } from '../../src/routes/api/stock/ops/+server';
+
+// The route reads its database through getDb(): point it at the test database of the moment.
+const dbRef = vi.hoisted(() => ({ current: null as unknown }));
+vi.mock('$lib/server/db', () => ({ getDb: () => dbRef.current }));
 
 let n = 0;
 const uuid = () => {
@@ -342,10 +346,11 @@ describe('stock ops', () => {
 });
 
 describe('POST /api/stock/ops (HTTP glue)', () => {
-  const call = (locals: unknown, body: unknown) =>
+  const call = (locals: unknown, body: unknown, headers: Record<string, string> = {}) =>
     POST({
       request: new Request('http://x/api/stock/ops', {
         method: 'POST',
+        headers,
         body: typeof body === 'string' ? body : JSON.stringify(body)
       }),
       locals
@@ -362,5 +367,60 @@ describe('POST /api/stock/ops (HTTP glue)', () => {
     const res = await call({ user }, { ops: [{ opId: 'nope' }] });
     expect(res.status).toBe(400);
     expect(await res.json()).toHaveProperty('error');
+  });
+
+  describe('utilisateur attendu (x-apogee-user)', () => {
+    let tdb: ReturnType<typeof makeTestDb>;
+    let user: { id: number; householdId: number; isAdmin: number };
+    let lotId: number;
+
+    beforeEach(() => {
+      tdb = makeTestDb();
+      dbRef.current = tdb;
+      const hid = makeHousehold(tdb, 'A');
+      user = { id: makeUser(tdb, hid), householdId: hid, isAdmin: 0 };
+      const loc = makeLocation(tdb, hid, 'Cave');
+      const wineId = tdb.db
+        .insert(tdb.schema.wines)
+        .values({ householdId: hid, identityKey: 'k' })
+        .returning({ id: tdb.schema.wines.id })
+        .get().id;
+      lotId = tdb.db
+        .insert(tdb.schema.stockLots)
+        .values({ wineId, locationId: loc, position: '', quantity: 3 })
+        .returning({ id: tdb.schema.stockLots.id })
+        .get().id;
+    });
+
+    const body = () => ({ ops: [{ opId: uuid(), kind: 'adjust', lotId, delta: -1 }] });
+    const quantity = () =>
+      tdb.db.select().from(tdb.schema.stockLots).where(eq(tdb.schema.stockLots.id, lotId)).get()?.quantity;
+
+    it('autre utilisateur que la session → 409 user_mismatch, rien n’est appliqué', async () => {
+      const res = await call({ user }, body(), { 'x-apogee-user': String(user.id + 1) });
+      expect(res.status).toBe(409);
+      expect(await res.json()).toEqual({ error: 'user_mismatch' });
+      expect(quantity()).toBe(3);
+      expect(tdb.db.select().from(tdb.schema.appliedOps).all()).toEqual([]);
+    });
+
+    it('en-tête illisible → 409, rien n’est appliqué', async () => {
+      const res = await call({ user }, body(), { 'x-apogee-user': 'abc' });
+      expect(res.status).toBe(409);
+      expect(quantity()).toBe(3);
+    });
+
+    it('même utilisateur → 200, appliqué', async () => {
+      const res = await call({ user }, body(), { 'x-apogee-user': String(user.id) });
+      expect(res.status).toBe(200);
+      expect((await res.json()).results[0]).toMatchObject({ status: 'applied' });
+      expect(quantity()).toBe(2);
+    });
+
+    it('sans en-tête → 200, appliqué comme avant', async () => {
+      const res = await call({ user }, body());
+      expect(res.status).toBe(200);
+      expect(quantity()).toBe(2);
+    });
   });
 });

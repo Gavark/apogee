@@ -445,6 +445,45 @@
   "cave_reset": "Reset",
   "drink_toast": "Drunk · {wine}",
   "drink_empty_lot": "No bottle left at this spot",
+  "offline_saved": "Saved, will sync",
+  "offline_undo_deferred": "The undo will be applied when syncing",
+  "offline_op_failed": "An operation could not be applied",
+  "offline_pending": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} change waiting to sync",
+        "countPlural=*": "{count} changes waiting to sync"
+      }
+    }
+  ],
+  "network_required": "This screen needs a network connection",
+  "offline_banner": "Offline",
+  "offline_banner_since": "Offline — data from {date}",
+  "logout_unsynced_title": "Unsynced changes",
+  "logout_unsynced_body": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} change hasn't been synced yet: stay logged in and get back online to send it",
+        "countPlural=*": "{count} changes haven't been synced yet: stay logged in and get back online to send them"
+      }
+    }
+  ],
+  "logout_anyway": "Log out anyway",
+  "logout_stay": "Stay logged in",
   "error_title": "Error {status}",
   "error_not_found": "This page doesn't exist.",
   "error_generic": "Something went wrong. Please try again in a moment.",

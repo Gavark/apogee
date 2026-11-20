@@ -7,10 +7,8 @@
   /** `onestimate` adds the "estimate with AI" button to wines without a window. */
   let { row, onestimate }: { row: CellarRow; onestimate?: (row: CellarRow) => void } = $props();
 
+  // `row` comes with the pending gestures applied (optimistic overlay).
   const wine = $derived(row.wine);
-  // In-flight "Bue" taps: the count drops at once, before the server answers.
-  let pending = $state(0);
-  const shown = $derived(Math.max(0, row.bottles - pending));
 
   const where = $derived(
     row.lots
@@ -19,7 +17,7 @@
       .join(', ')
   );
   const meta = $derived(
-    [wine.vintage ?? m.wine_nv(), colorLabel(wine.color), m.wine_bottle_count({ count: shown })]
+    [wine.vintage ?? m.wine_nv(), colorLabel(wine.color), m.wine_bottle_count({ count: row.bottles })]
       .filter((x) => x !== null && x !== '')
       .join(' · ')
   );
@@ -46,7 +44,7 @@
     </div>
   {/if}
   {#if row.bottles > 0}
-    <div class="drink"><DrinkButton {row} onpending={(d) => (pending += d)} /></div>
+    <div class="drink"><DrinkButton {row} /></div>
   {/if}
 </li>
 

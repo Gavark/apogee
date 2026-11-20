@@ -5,6 +5,7 @@
   import Button from '$lib/components/Button.svelte';
   import { showToast } from '$lib/toast.svelte';
   import { pushSupportState } from '$lib/push-support';
+  import { network } from '$lib/offline/online.svelte';
 
   /** Called after this device was subscribed and registered server-side. */
   let { onchange }: { onchange?: () => void } = $props();
@@ -90,7 +91,7 @@
 {:else if pushState === 'active'}
   <p class="ok"><Bell size={18} weight="fill" aria-hidden="true" /> {m.notif_btn_active()}</p>
 {:else}
-  <Button variant="primary" onclick={enable} disabled={pushState === 'subscribing'}>
+  <Button variant="primary" onclick={enable} disabled={pushState === 'subscribing' || !network.online}>
     <Bell size={18} aria-hidden="true" />
     {m.notif_btn_enable()}
   </Button>

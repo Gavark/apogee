@@ -9,7 +9,6 @@ import {
   findDuplicate,
   validateParsedWine,
   MAX_LOT_QUANTITY,
-  MAX_TEXT_LEN,
   type Color,
   type LotInput,
   type WineInput,
@@ -17,6 +16,7 @@ import {
 } from '$lib/server/wines';
 
 import { COLORS } from '$lib/wine-constants';
+import { MAX_POSITION_LEN } from '$lib/server/stock';
 
 type DB = BaseSQLiteDatabase<'sync', unknown, typeof schema>;
 
@@ -78,7 +78,7 @@ export function submitAddWine(db: DB, ctx: HouseholdCtx, form: FormData, year: n
   const { input, lot } = parseWineForm(form);
   const error = validateParsedWine(input, year);
   if (error) return { ok: false, error };
-  if (lot.position.length > MAX_TEXT_LEN) return { ok: false, error: { field: 'position', reason: 'invalid' } };
+  if (lot.position.length > MAX_POSITION_LEN) return { ok: false, error: { field: 'position', reason: 'invalid' } };
   if (!Number.isSafeInteger(lot.quantity) || lot.quantity < 1 || lot.quantity > MAX_LOT_QUANTITY)
     return { ok: false, error: { field: 'quantity', reason: 'invalid' } };
   if (!Number.isSafeInteger(lot.locationId)) return { ok: false, error: { field: 'locationId', reason: 'invalid' } };

@@ -47,6 +47,23 @@ Les migrations de base de données sont appliquées automatiquement à chaque d�
 
 `ADDRESS_HEADER` et `XFF_DEPTH` sont définis dans `docker-compose.yml` parce que le port est lié à `127.0.0.1`, derrière Caddy. Sans eux, tous les clients partageraient la même IP (celle du proxy) et la même limite de tentatives. **Si vous exposez le conteneur directement, sans reverse proxy, supprimez ces deux variables** : sinon un client pourrait forger `X-Forwarded-For` pour contourner la limite.
 
+## Mode hors ligne
+
+Apogée est une PWA : une fois installée, elle reste utilisable sans réseau (cave, sous-sol, TGV).
+
+**Ce qui marche hors ligne**
+
+- Ouvrir l'appli installée et consulter « Quoi ouvrir », la cave et les fiches déjà vues (copie gardée par le service worker, propre à chaque compte). À l'ouverture, l'écran recharge ses données depuis la copie la plus récente : celle des derniers gestes, pas seulement celle du dernier chargement complet.
+- Les gestes de stock : Bue, +/−, déplacer, annuler. Ils s'affichent tout de suite, sont mis en file sur l'appareil et un indicateur compte les gestes en attente.
+
+**Ce qui nécessite le réseau** : ajout et modification d'un vin, lieux, compte (mot de passe, sessions), foyer, notifications, analyse IA de l'étiquette, administration. Ces écrans affichent « Cet écran nécessite le réseau » et désactivent l'envoi tant que l'appareil est hors ligne.
+
+**Synchronisation automatique** : les gestes en attente partent au retour du réseau, au retour sur l'appli, toutes les 30 s et, selon les navigateurs, via Background Sync (Chrome, Edge, Android : oui, même appli fermée ; Safari et iOS : non, les gestes ne partent que lorsque l'appli est ouverte).
+
+**Bandeau « Hors ligne »** : quand un écran vient de la copie locale, il indique la date des données affichées.
+
+**Comptes** : un geste ne part jamais sous un autre compte que celui qui l'a fait. À la déconnexion avec des gestes non synchronisés, l'appli prévient et propose de rester, ou de se déconnecter quand même (les gestes sont alors perdus).
+
 ## Notifications
 
 Apogée peut prévenir quand un vin entre dans une nouvelle phase de dégustation (à boire, apogée, à boire vite, passé) et, une fois par mois, rappeler les bouteilles à ne pas oublier. Chaque personne les active depuis **Compte > Notifications**, appareil par appareil, et peut désactiver séparément les deux types de messages.
