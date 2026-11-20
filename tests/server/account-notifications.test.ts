@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { makeTestDb } from '../helpers/db';
 import { makeHousehold, makeUser } from '../helpers/fixtures';
-import { registerSubscription } from '../../src/lib/server/push/subscribe';
+import { registerSubscription, findSubscriptionIdByEndpoint } from '../../src/lib/server/push/subscribe';
 import { clearRateLimit } from '../../src/lib/server/rate-limit';
 import type { PushSender } from '../../src/lib/server/push/send';
 import {
@@ -56,6 +56,14 @@ describe('account notifications', () => {
     expect(sender.mock.calls[0][1].body).toMatch(/work on this device/i);
     await sendTestNotification(tdb.db, userId, 'fr', sender);
     expect(sender.mock.calls[1][1].body).toMatch(/fonctionnent sur cet appareil/);
+  });
+
+  it('finds a device by endpoint, only for its owner', () => {
+    registerSubscription(tdb.db, userId, sub('https://push.test/a'));
+    const id = getNotificationSettings(tdb.db, userId).devices[0].id;
+    expect(findSubscriptionIdByEndpoint(tdb.db, userId, 'https://push.test/a')).toBe(id);
+    expect(findSubscriptionIdByEndpoint(tdb.db, otherId, 'https://push.test/a')).toBeNull();
+    expect(findSubscriptionIdByEndpoint(tdb.db, userId, 'https://push.test/zzz')).toBeNull();
   });
 
   it('limits test notifications to 3 per hour per user', async () => {

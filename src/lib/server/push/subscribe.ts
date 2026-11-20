@@ -79,6 +79,15 @@ export function deleteSubscriptionByEndpoint(db: DB, endpoint: string): void {
     .run();
 }
 
+/** Id of the user's own subscription with this endpoint, or null. */
+export function findSubscriptionIdByEndpoint(db: DB, userId: number, endpoint: string): number | null {
+  return (
+    db.select({ id: schema.pushSubscriptions.id }).from(schema.pushSubscriptions)
+      .where(and(eq(schema.pushSubscriptions.endpoint, endpoint), eq(schema.pushSubscriptions.userId, userId)))
+      .all()[0]?.id ?? null
+  );
+}
+
 /** Delete by endpoint only if it belongs to the given user. Returns true if a row was deleted. */
 export function revokeSubscriptionByEndpoint(db: DB, userId: number, endpoint: string): boolean {
   return (

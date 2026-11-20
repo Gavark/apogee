@@ -21,17 +21,49 @@
     limit: m.notif_test_limit
   };
 
-  let currentEndpoint = $state<string | null>(null);
-  onMount(async () => {
+  // Id of this browser's own device row; the server answers, endpoints are never sent to the page.
+  let currentId = $state<number | null>(null);
+
+  async function locateCurrent(): Promise<void> {
     try {
-      if ('serviceWorker' in navigator && 'PushManager' in window) {
-        const reg = await navigator.serviceWorker.ready;
-        currentEndpoint = (await reg.pushManager.getSubscription())?.endpoint ?? null;
+      if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
+      const sub = await (await navigator.serviceWorker.ready).pushManager.getSubscription();
+      if (!sub) {
+        currentId = null;
+        return;
+      }
+      const lookup = async (): Promise<number | null> => {
+        const res = await fetch('/api/push/current', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ endpoint: sub.endpoint })
+        });
+        return res.ok ? ((await res.json()) as { id: number | null }).id : null;
+      };
+      currentId = await lookup();
+      if (currentId === null) {
+        // Subscribed in the browser but unknown to the server: register it again.
+        const json = sub.toJSON();
+        const res = await fetch('/api/push/subscribe', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            endpoint: sub.endpoint,
+            p256dh: json.keys?.p256dh,
+            auth: json.keys?.auth,
+            userAgent: navigator.userAgent
+          })
+        });
+        if (res.ok) {
+          currentId = await lookup();
+          await invalidateAll();
+        }
       }
     } catch {
-      currentEndpoint = null;
+      currentId = null;
     }
-  });
+  }
+  onMount(locateCurrent);
 
   async function remove(id: number) {
     const res = await fetch('/api/push/unsubscribe', {
@@ -41,11 +73,11 @@
     });
     if (!res.ok) return;
     // Removing this very device also drops the browser-side subscription.
-    if (currentEndpoint && data.endpoints[id] === currentEndpoint) {
+    if (currentId === id) {
       try {
         const reg = await navigator.serviceWorker.ready;
         await (await reg.pushManager.getSubscription())?.unsubscribe();
-        currentEndpoint = null;
+        currentId = null;
       } catch {
         /* the server row is gone; a stale browser subscription is harmless */
       }
@@ -68,6 +100,7 @@
       <EnablePushButton
         onchange={async () => {
           await invalidateAll();
+          await locateCurrent();
         }}
       />
     </Card>

@@ -2,6 +2,7 @@
 /* eslint-disable */
 import { immutable, assets } from '$app/manifest';
 import { version } from '$app/env';
+import { safeNotificationUrl } from '../lib/push-url';
 
 declare const self: ServiceWorkerGlobalScope;
 
@@ -46,24 +47,24 @@ self.addEventListener('fetch', (event) => {
   event.respondWith(caches.match(event.request).then((hit) => hit ?? fetch(event.request)));
 });
 
-type PushPayload = { title: string; body: string; url: string; tag: string };
-
 // Always show the notification: the server already limits it to one a day.
 self.addEventListener('push', (event) => {
-  if (!event.data) return;
-  let p: PushPayload;
+  // userVisibleOnly requires showing something, even for an unreadable payload.
+  let p: Record<string, unknown> = {};
   try {
-    p = event.data.json() as PushPayload;
+    const parsed: unknown = event.data?.json();
+    if (parsed && typeof parsed === 'object') p = parsed as Record<string, unknown>;
   } catch {
-    return;
+    /* generic notification below */
   }
+  const known = typeof p.title === 'string' && p.title !== '';
   event.waitUntil(
-    self.registration.showNotification(p.title, {
-      body: p.body,
+    self.registration.showNotification(known ? (p.title as string) : 'Apogée', {
+      body: known && typeof p.body === 'string' ? p.body : 'Apogée',
       icon: '/icon-192.png',
       badge: '/icon-192.png',
-      tag: p.tag,
-      data: { url: p.url }
+      tag: typeof p.tag === 'string' && p.tag ? p.tag : 'apogee',
+      data: { url: safeNotificationUrl(p.url, self.location.origin) }
     })
   );
 });
@@ -71,7 +72,8 @@ self.addEventListener('push', (event) => {
 // Focus an open Apogée window and send it to the target, else open a new one.
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
-  const path = (event.notification.data as { url?: string } | undefined)?.url ?? '/app';
+  const raw = (event.notification.data as { url?: unknown } | undefined)?.url;
+  const path = safeNotificationUrl(raw, self.location.origin);
   const target = new URL(path, self.location.origin).href;
   event.waitUntil(
     (async () => {
@@ -80,9 +82,13 @@ self.addEventListener('notificationclick', (event) => {
         | WindowClient
         | undefined;
       if (existing) {
-        await existing.focus();
-        if (existing.url !== target) await existing.navigate(target);
-        return;
+        try {
+          await existing.focus();
+          if (existing.url !== target) await existing.navigate(target);
+          return;
+        } catch {
+          /* fall through to a new window */
+        }
       }
       await self.clients.openWindow(target);
     })()

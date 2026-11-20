@@ -2,7 +2,6 @@ import { fail } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
 import { getDb } from '$lib/server/db';
 import { requireCtx } from '$lib/server/context';
-import { listSubscriptionsForUser } from '$lib/server/push/subscribe';
 import { getNotificationSettings, saveNotificationSettings, sendTestNotification } from './_logic';
 
 export const load: PageServerLoad = ({ locals }) => {
@@ -10,9 +9,7 @@ export const load: PageServerLoad = ({ locals }) => {
   const { db } = getDb();
   return {
     ...getNotificationSettings(db, ctx.userId),
-    timezone: locals.user!.timezone,
-    // The user's own endpoints, so this browser can tell which row is itself.
-    endpoints: Object.fromEntries(listSubscriptionsForUser(db, ctx.userId).map((s) => [s.id, s.endpoint]))
+    timezone: locals.user!.timezone
   };
 };
 
