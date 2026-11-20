@@ -76,6 +76,28 @@ Documentation :
 - [ ] **Step 3: Essai réel sur Docker Desktop** dans un dossier jetable hors du dépôt (copie de `docker-compose.yml`, `scripts/`, `.env` minimal avec `ORIGIN`, `BACKUP_SCHEDULE='*/1 * * * *'`, `BACKUP_RETENTION=2`, ports surchargés si 3000 est pris) : démarrer, créer l'admin via `/setup` (curl suffit), vérifier la sauvegarde initiale, attendre deux passages du cron → rotation à 2, simuler l'ajout d'un fichier dans `data/photos/1/` (en `sudo`/conteneur si besoin), relancer à la demande → paire avec archive ; puis **restaurer** une paire selon `docs/BACKUP.md` et vérifier que l'appli répond (`/healthz`) et que la base restaurée contient l'utilisateur. Tout supprimer ensuite (conteneurs, dossier, images si téléchargées pour l'occasion).
 - [ ] **Step 4: Commit** — `feat: conteneur de sauvegarde nocturne, documentation de restauration`
 
+### Task 3: Copie hors de la machine vers Google Drive (hôte Windows)
+
+*Ajoutée à la demande de l'utilisateur : même mécanisme que babysleep (tâche planifiée `\BabySleep\Backup vers Google Drive`, script `D:\Dev\Gavark\CalculateurSommeilBebe\scripts\sync-backups-offsite.ps1`, destination `G:\Mon Drive\Perso\Backup\Babysleep`). Docker Desktop ne voit pas le lecteur virtuel de Google Drive : la copie se fait côté Windows.*
+
+**Files:**
+- Create: `scripts/sync-backups-offsite.ps1`, `tests/server/sync-offsite.test.ts`
+- Modify: `docs/BACKUP.md` (section « Hôte Windows : tâche planifiée + dossier synchronisé »), `README.md` (une ligne vers cette section)
+
+**Interfaces:**
+- `sync-backups-offsite.ps1 -Destination <dossier> [-Source <dossier>] [-RetentionDays 7] [-DryRun]` — compatible Windows PowerShell 5.1 et PowerShell 7 ; `-Source` par défaut `..ackups` relatif au script ; journal `backups\sync-offsite.log` (500 dernières lignes) ; code de sortie 0 / 1.
+
+Règles (reprises de babysleep, adaptées aux paires d'Apogée) :
+- copie de chaque `*.sqlite` **et** `*.tar.gz` de la source de moins de `RetentionDays` jours absent ou de taille différente à destination, copies nommées comprises ; vérification SHA256 de chaque copie (écart → suppression de la copie et échec) ;
+- rotation à destination des `*.sqlite` et `*.tar.gz` de plus de `RetentionDays` jours, **sauf** si la destination n'a aucune sauvegarde récente (filet de sécurité : rien n'est supprimé) ;
+- lecteur de destination absent (client Drive arrêté) → échec sans rien toucher ; dossier de destination créé s'il manque ;
+- **dossier source absent** (Apogée pas encore déployé) → message « rien à copier » et **sortie 0** (différence assumée avec babysleep, pour que la tâche ne soit pas en échec chaque nuit avant le premier déploiement).
+
+- [ ] **Step 1: Écrire les tests** (`tests/server/sync-offsite.test.ts`, ignorés si ni `pwsh` ni `powershell` n'est disponible) : dossiers temporaires source/destination ; copie d'une paire récente + d'une copie nommée ; fichier ancien (mtime -10 j) non copié ; rotation d'un fichier ancien à destination ; filet de sécurité (destination sans fichier récent → rien supprimé) ; source absente → sortie 0 ; destination sur lecteur inexistant → sortie 1 ; `-DryRun` ne modifie rien.
+- [ ] **Step 2: Lancer** — FAIL. **Step 3: Écrire le script et la doc.** **Step 4: Lancer** — PASS ; `npm test`, `npm run check`.
+- [ ] **Step 5: Commit** — `feat: copie des sauvegardes vers un dossier synchronisé (hôte Windows)`
+- [ ] **Step 6 (contrôleur, accord de l'utilisateur donné)** — essai `-DryRun` vers `G:\Mon Drive\Perso\Backup\Apogee`, puis enregistrement de la tâche `\Apogee\Backup vers Google Drive` (quotidienne 23:15, mêmes réglages que celle de babysleep : interactive, `StartWhenAvailable`, 15 min).
+
 ---
 
 ## Vérification finale
