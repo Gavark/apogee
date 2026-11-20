@@ -3,6 +3,7 @@ import type { BaseSQLiteDatabase } from 'drizzle-orm/sqlite-core';
 import * as schema from './db/schema';
 import { NotFoundError, type HouseholdCtx } from './context';
 import type { Wine } from './db/schema';
+import { deletePhoto, photosDir } from './photos';
 import {
   HOME_SECTION_ORDER,
   computePhase,
@@ -238,14 +239,24 @@ export function updateWine(db: DB, ctx: HouseholdCtx, wineId: number, input: Win
   });
 }
 
-export function deleteWine(db: DB, ctx: HouseholdCtx, wineId: number): void {
-  db.transaction((tx) => {
-    findOwnedWine(tx, ctx, wineId);
+export function deleteWine(
+  db: DB,
+  ctx: HouseholdCtx,
+  wineId: number,
+  photosDirPath: string = photosDir()
+): void {
+  const photo = db.transaction((tx) => {
+    const wine = findOwnedWine(tx, ctx, wineId);
     // lots and consumptions go with the wine (ON DELETE CASCADE)
     tx.delete(wines)
       .where(and(eq(wines.id, wineId), eq(wines.householdId, ctx.householdId)))
       .run();
+    if (!wine.labelPhoto) return null;
+    const stillUsed = tx.select({ id: wines.id }).from(wines).where(eq(wines.labelPhoto, wine.labelPhoto)).get();
+    return stillUsed ? null : wine.labelPhoto;
   });
+  // Only once the delete has committed; a photo another wine still points to is kept.
+  deletePhoto(photosDirPath, photo);
 }
 
 export type CellarLot = {

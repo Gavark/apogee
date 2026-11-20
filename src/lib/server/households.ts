@@ -2,6 +2,7 @@ import { eq, sql, asc, count } from 'drizzle-orm';
 import type { BaseSQLiteDatabase } from 'drizzle-orm/sqlite-core';
 import * as schema from './db/schema';
 import type { HouseholdCtx } from './context';
+import { deleteHouseholdPhotos, photosDir } from './photos';
 
 type DB = BaseSQLiteDatabase<'sync', unknown, typeof schema>;
 
@@ -55,11 +56,12 @@ export function deleteUserAsAdmin(
 export function deleteHouseholdAsAdmin(
   db: DB,
   ctx: HouseholdCtx,
-  householdId: number
+  householdId: number,
+  photosDirPath: string = photosDir()
 ): { ok: true } | { ok: false; reason: 'forbidden' | 'has_members' | 'own_household' | 'not_found' } {
   if (!ctx.isAdmin) return { ok: false, reason: 'forbidden' };
   if (householdId === ctx.householdId) return { ok: false, reason: 'own_household' };
-  return db.transaction((tx) => {
+  const result = db.transaction((tx) => {
     const household = tx.select({ id: schema.households.id }).from(schema.households)
       .where(eq(schema.households.id, householdId)).all()[0];
     if (!household) return { ok: false, reason: 'not_found' as const };
@@ -72,6 +74,9 @@ export function deleteHouseholdAsAdmin(
     tx.delete(schema.households).where(eq(schema.households.id, householdId)).run();
     return { ok: true as const };
   });
+  // Only once the delete has committed.
+  if (result.ok) deleteHouseholdPhotos(photosDirPath, householdId);
+  return result;
 }
 
 export type AdminInvitationRow = {

@@ -154,3 +154,23 @@ export type Location = typeof locations.$inferSelect;
 export type Wine = typeof wines.$inferSelect;
 export type StockLot = typeof stockLots.$inferSelect;
 export type Consumption = typeof consumptions.$inferSelect;
+
+export const labelAnalyses = sqliteTable(
+  'label_analyses',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    householdId: integer('household_id')
+      .notNull()
+      .references(() => households.id, { onDelete: 'cascade' }),
+    userId: integer('user_id').references(() => users.id, { onDelete: 'set null' }),
+    photoPath: text('photo_path'),
+    /** The normalized LabelAnalysis, as JSON. Null when the analysis failed. */
+    result: text('result'),
+    errorCode: text('error_code'),
+    model: text('model'),
+    createdAt: integer('created_at').notNull().default(sql`(unixepoch())`)
+  },
+  (t) => ({
+    householdCreatedIdx: index('label_analyses_household_created').on(t.householdId, t.createdAt)
+  })
+);
