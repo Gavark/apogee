@@ -10,6 +10,7 @@ import {
 } from '../../../src/lib/server/notifications/phases';
 import { createWine, updateWine, applyAiWindow, addStock, type WineInput } from '../../../src/lib/server/wines';
 import { currentYear } from '../../../src/lib/phase';
+import { applyStockOps } from '../../../src/lib/server/stock';
 import type { HouseholdCtx } from '../../../src/lib/server/context';
 
 const NOW = 1_800_000_000;
@@ -58,6 +59,24 @@ beforeEach(() => {
 });
 
 describe('phases', () => {
+  it('stock adjust (+) et unconsume sur un vin à 0 bouteille : phase courante silencieuse', () => {
+    const y = currentYear('Europe/Paris');
+    scanHouseholdPhases(tdb.db, hh, y, '2020-01-01', NOW);
+    const id = insertWine(win(y - 2, null, null, y + 5), 1, 'Op');
+    const lot = tdb.db.select().from(tdb.schema.stockLots).get()!;
+    const r = applyStockOps(tdb.db, ctx, [
+      { opId: '11111111-1111-4111-8111-111111111111', kind: 'consume', lotId: lot.id, consumedOn: '2027-01-01' }
+    ]);
+    expect(log(id)).toHaveLength(0); // consuming never marks
+    applyStockOps(tdb.db, ctx, [{ opId: '22222222-2222-4222-8222-222222222222', kind: 'unconsume', consumptionId: r[0].consumptionId! }]);
+    expect(log(id)).toMatchObject([{ phase: 'ready', silent: 1 }]);
+
+    const id2 = insertWine(win(y - 2, null, null, y + 5), 0, 'Op2');
+    const lot2 = tdb.db.select().from(tdb.schema.stockLots).where(eq(tdb.schema.stockLots.wineId, id2)).get()!;
+    applyStockOps(tdb.db, ctx, [{ opId: '33333333-3333-4333-8333-333333333333', kind: 'adjust', lotId: lot2.id, delta: 2 }]);
+    expect(log(id2)).toMatchObject([{ phase: 'ready', silent: 1 }]);
+  });
+
   it('addStock sur un vin a 0 bouteille : phase courante marquee silencieuse, rien a annoncer', () => {
     const y = currentYear('Europe/Paris');
     const id = insertWine(win(y - 2, null, null, y + 5), 0, 'Vide');

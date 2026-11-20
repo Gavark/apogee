@@ -34,11 +34,11 @@ function displayName(w: CellarRow['wine'], opts: NameLocale): string {
   return label || m.wine_unnamed({}, opts);
 }
 
-/** Notifiable events logged since the user's last dispatch, for wines still in stock. */
+/** Wines with a notifiable change since the user's last dispatch (still in stock), each counted once at its most advanced phase. */
 function countPhaseEvents(db: DB, user: DigestUser): Digest['phaseCounts'] {
   const since = user.lastDispatchAt ?? -1;
   const rows = db
-    .select({ phase: notificationLog.phase, n: sql<number>`count(*)` })
+    .select({ wineId: notificationLog.wineId, phase: notificationLog.phase })
     .from(notificationLog)
     .innerJoin(wines, eq(wines.id, notificationLog.wineId))
     .where(
@@ -49,14 +49,20 @@ function countPhaseEvents(db: DB, user: DigestUser): Digest['phaseCounts'] {
         sql`(select coalesce(sum(${stockLots.quantity}), 0) from ${stockLots} where ${stockLots.wineId} = ${wines.id}) > 0`
       )
     )
-    .groupBy(notificationLog.phase)
     .all();
+  const rank = (p: string) => (NOTIFIED_PHASES as readonly string[]).indexOf(p);
+  const best = new Map<number, NotifiedPhase>();
+  for (const r of rows) {
+    if (rank(r.phase) < 0) continue;
+    const cur = best.get(r.wineId);
+    if (cur === undefined || rank(r.phase) > rank(cur)) best.set(r.wineId, r.phase as NotifiedPhase);
+  }
   const counts: Digest['phaseCounts'] = {};
-  for (const r of rows) if ((NOTIFIED_PHASES as readonly string[]).includes(r.phase)) counts[r.phase as NotifiedPhase] = r.n;
+  for (const p of best.values()) counts[p] = (counts[p] ?? 0) + 1;
   return counts;
 }
 
-function monthlyReminder(db: DB, user: DigestUser, year: number): Digest['monthly'] {
+function monthlyReminder(db: DB, user: DigestUser, year: number, opts: NameLocale): Digest['monthly'] {
   const urgent = listCellar(db, { userId: user.id, householdId: user.householdId, isAdmin: false }, {}, year).filter(
     (r) => r.bottles > 0 && (r.phase === 'last_call' || r.phase === 'past')
   );
@@ -69,15 +75,20 @@ function monthlyReminder(db: DB, user: DigestUser, year: number): Digest['monthl
   );
   return {
     bottles: urgent.reduce((sum, r) => sum + r.bottles, 0),
-    // Only a nameless wine falls back to a localized label (base locale here); real names are locale-neutral.
-    names: urgent.slice(0, MAX_NAMES).map((r) => displayName(r.wine, {}))
+    names: urgent.slice(0, MAX_NAMES).map((r) => displayName(r.wine, opts))
   };
 }
 
-export function buildDigest(db: DB, user: DigestUser, monthKey: string, year: number): Digest | null {
+export function buildDigest(
+  db: DB,
+  user: DigestUser,
+  monthKey: string,
+  year: number,
+  locale: 'fr' | 'en' = 'fr'
+): Digest | null {
   const phaseCounts = user.notifyPhases ? countPhaseEvents(db, user) : {};
   const monthly =
-    user.notifyMonthly && user.lastMonthlyMonth !== monthKey ? monthlyReminder(db, user, year) : null;
+    user.notifyMonthly && user.lastMonthlyMonth !== monthKey ? monthlyReminder(db, user, year, { locale }) : null;
   if (Object.keys(phaseCounts).length === 0 && !monthly) return null;
   return { phaseCounts, monthly };
 }

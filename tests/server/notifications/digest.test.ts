@@ -48,9 +48,8 @@ describe('buildDigest', () => {
     expect(d.phaseCounts).toEqual({ peak: 2 });
     expect(d.monthly).toBeNull();
     expect(buildDigest(tdb.db, user({ lastDispatchAt: null, notifyMonthly: 0 }), '2027-01', YEAR)!.phaseCounts).toEqual({
-      peak: 2,
-      ready: 1
-    });
+      peak: 2
+    }); // wine a: ready then peak -> counted once, at peak
   });
 
   it("vin bu entre la détection et l'envoi (0 bouteille) : non compté", () => {
@@ -89,6 +88,27 @@ describe('buildDigest', () => {
       monthly: null
     });
     expect(buildDigest(tdb.db, user({ notifyPhases: 0, notifyMonthly: 0 }), '2027-01', YEAR)).toBeNull();
+  });
+});
+
+describe('buildDigest (R6, locale)', () => {
+  it('un vin qui a franchi deux phases compte une fois, à la plus avancée', () => {
+    const a = addWine('A', 2010, [2005, null, null, 2025], 1);
+    event(a, 'ready', 10);
+    event(a, 'last_call', 20);
+    event(a, 'past', 30);
+    expect(buildDigest(tdb.db, user({ notifyMonthly: 0 }), '2027-01', YEAR)!.phaseCounts).toEqual({ past: 1 });
+  });
+
+  it('le nom de repli est localisé', () => {
+    tdb.db.insert(tdb.schema.wines).values({
+      householdId: hh, producer: null, formatCl: 75, vintage: null, identityKey: 'n',
+      drinkFrom: 2000, drinkUntil: 2020
+    }).run();
+    const id = tdb.db.select().from(tdb.schema.wines).get()!.id;
+    tdb.db.insert(tdb.schema.stockLots).values({ wineId: id, locationId: loc, position: '', quantity: 1 }).run();
+    expect(buildDigest(tdb.db, user({ notifyPhases: 0 }), '2027-01', YEAR, 'en')!.monthly!.names).toEqual(['Unnamed wine']);
+    expect(buildDigest(tdb.db, user({ notifyPhases: 0 }), '2027-01', YEAR, 'fr')!.monthly!.names).not.toEqual(['Unnamed wine']);
   });
 });
 

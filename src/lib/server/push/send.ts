@@ -17,12 +17,15 @@ export type PushSender = (
   vapid: ReturnType<typeof vapidDetails>
 ) => Promise<{ statusCode: number }>;
 
+/** A stalled push service must not hold a tick open. */
+const PUSH_TIMEOUT_MS = 15_000;
+
 /** Real sender; a rejected promise (WebPushError) carries `statusCode`. */
 export const webPushSender: PushSender = async (sub, payload, vapid) => {
   const res = await webpush.sendNotification(
     { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
     JSON.stringify(payload),
-    { vapidDetails: vapid, TTL: 86400 }
+    { vapidDetails: vapid, TTL: 86400, timeout: PUSH_TIMEOUT_MS }
   );
   return { statusCode: res.statusCode };
 };

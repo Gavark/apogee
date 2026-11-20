@@ -1,4 +1,4 @@
-import { eq, and } from 'drizzle-orm';
+import { eq, and, isNull } from 'drizzle-orm';
 import type { BaseSQLiteDatabase } from 'drizzle-orm/sqlite-core';
 import * as schema from '../db/schema';
 
@@ -18,6 +18,12 @@ export type NewSubscription = {
  */
 export function registerSubscription(db: DB, userId: number, sub: NewSubscription): void {
   const t = Math.floor(Date.now() / 1000);
+  // A first subscription starts the digest history now: no dump of changes from before it existed.
+  if (listSubscriptionsForUser(db, userId).length === 0)
+    db.update(schema.users)
+      .set({ lastDispatchAt: t })
+      .where(and(eq(schema.users.id, userId), isNull(schema.users.lastDispatchAt)))
+      .run();
   db.insert(schema.pushSubscriptions).values({
     userId,
     endpoint: sub.endpoint,

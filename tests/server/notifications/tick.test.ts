@@ -155,4 +155,40 @@ describe('runNotificationTick', () => {
     expect(await tick('2027-01-05T17:00:00Z')).toEqual({ processed: 1, sent: 1 });
     expect(pushes.map((p) => p.endpoint)).toEqual(['https://push/ok']);
   });
+
+  it('deux passages simultanés avec un envoi lent : un seul push par utilisateur', async () => {
+    member('Europe/Paris', 'a', { notifyMonthly: 0 });
+    prime('2026-12-31');
+    crossing();
+    const slow: PushSender = async (sub, payload) => {
+      await new Promise((r) => setTimeout(r, 30));
+      return sender(sub, payload, undefined as never);
+    };
+    const [r1, r2] = await Promise.all([tick('2027-01-05T17:00:00Z', slow), tick('2027-01-05T17:00:01Z', slow)]);
+    expect(pushes).toHaveLength(1);
+    expect(r1.sent + r2.sent).toBe(1);
+  });
+
+  it("jour déjà pris par un autre passage (course) : l'utilisateur est ignoré", async () => {
+    const a = member('Europe/Paris', 'a', { notifyMonthly: 0 });
+    prime('2026-12-31');
+    crossing();
+    // Simulates a second process having claimed the evening after our candidate read: stale row, claim fails.
+    const sendSpy = vi.fn(sender);
+    tdb.db.update(tdb.schema.users).set({ lastDispatchDate: '2027-01-05' }).where(eq(tdb.schema.users.id, a)).run();
+    expect(await tick('2027-01-05T17:00:00Z', sendSpy)).toEqual({ processed: 0, sent: 0 });
+    expect(sendSpy).not.toHaveBeenCalled();
+  });
+
+  it("rappel évalué une fois par mois : liste vide le 1er, vin past ajouté le 15 → pas de rappel ; mois suivant → rappel", async () => {
+    member('Europe/Paris', 'a');
+    prime('2026-12-31');
+    await tick('2027-01-01T17:00:00Z'); // nothing to say, month evaluated
+    addWine('Passe', [2000, null, null, 2020], 1);
+    pushes = [];
+    await tick('2027-01-15T17:00:00Z');
+    expect(pushes.filter((p) => p.body.includes('Ce mois-ci'))).toHaveLength(0);
+    await tick('2027-02-01T17:00:00Z');
+    expect(pushes.some((p) => p.body.includes('Ce mois-ci, 1 bouteille'))).toBe(true);
+  });
 });

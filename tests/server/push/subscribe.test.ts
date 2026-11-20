@@ -81,3 +81,21 @@ describe('push subscription service', () => {
     expect(listSubscriptionsForUser(tdb.db, userId)).toHaveLength(0);
   });
 });
+
+describe('first subscription (R6)', () => {
+  it('starts the digest history now, once', async () => {
+    const { makeTestDb } = await import('../../helpers/db');
+    const { makeHousehold, makeUser } = await import('../../helpers/fixtures');
+    const { eq } = await import('drizzle-orm');
+    const tdb = makeTestDb();
+    const uid = makeUser(tdb, makeHousehold(tdb));
+    const lda = () => tdb.db.select().from(tdb.schema.users).where(eq(tdb.schema.users.id, uid)).get()!.lastDispatchAt;
+    expect(lda()).toBeNull();
+    registerSubscription(tdb.db, uid, { endpoint: 'https://p/1', p256dh: 'P', auth: 'A', userAgent: null });
+    const first = lda();
+    expect(first).toBeGreaterThan(0);
+    tdb.db.update(tdb.schema.users).set({ lastDispatchAt: 5 }).where(eq(tdb.schema.users.id, uid)).run();
+    registerSubscription(tdb.db, uid, { endpoint: 'https://p/2', p256dh: 'P', auth: 'A', userAgent: null });
+    expect(lda()).toBe(5);
+  });
+});
