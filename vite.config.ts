@@ -24,6 +24,11 @@ export default defineConfig({
       // can drift to `locale-modules` and create noisy diffs in src/paraglide
       // every time a contributor starts the dev server.
       outputStructure: 'message-modules',
+      // Paraglide 3 writes `isDevelopment = true|false` into runtime.js depending
+      // on the Vite mode (dev/vitest vs build), which would flip the committed
+      // file on every run. Emit a runtime expression instead, as Paraglide
+      // already does for `isServer`: identical output, correct value per mode.
+      isDevelopment: 'import.meta.env?.DEV ?? false',
       // Tell the client-side runtime to read the locale from the SAME cookie
       // hooks.server.ts sets ('locale'), with Accept-Language as a fallback
       // for first visits. Without this, the client default strategy is
