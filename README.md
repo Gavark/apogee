@@ -39,6 +39,8 @@ Les migrations de base de données sont appliquées automatiquement à chaque d�
 | `AI_BASE_URL` | (vide) | Adresse de l'API, obligatoire avec `openai-compatible` (par exemple `https://api.openai.com/v1`). |
 | `AI_DAILY_LIMIT_PER_HOUSEHOLD` | `100` | Analyses facturées par jour et par foyer (réussies, ou réponse refusée / inexploitable). `0` = illimité. |
 | `PHOTOS_DIR` | `photos/` à côté de la base (`/data/photos` dans l'image) | Dossier des photos d'étiquettes, dans le volume de données. À ne pas changer avec Docker. |
+| `BACKUP_RETENTION` | `30` | Nombre de sauvegardes conservées de chaque type (bases et archives de photos) par le conteneur `backup`. |
+| `BACKUP_SCHEDULE` | `0 3 * * *` | Horaire cron de la sauvegarde automatique (heure de `TZ`). Par défaut, tous les jours à 3 h. |
 | `BODY_SIZE_LIMIT` | `8M` (image) | Taille maximale d'une requête, pour les photos. Fixé à `8M` dans l'image Docker. Hors Docker (`npm start`), définissez-la aussi : adapter-node limite à 512 Ko par défaut et la plupart des photos seraient refusées (erreur 413). |
 | `NODE_ENV` | `production` (image) | Fixé par l'image : cookies sécurisés, et la page `/dev/styleguide` répond 404. |
 
@@ -89,7 +91,7 @@ L'inscription se fait uniquement sur invitation. Les membres d'un foyer invitent
 
 ## Sauvegardes
 
-Les données tiennent dans un fichier SQLite et, si vous utilisez l'analyse IA, dans le dossier `data/photos/` (photos des étiquettes). Voir [docs/BACKUP.md](docs/BACKUP.md).
+Le `docker-compose.yml` lance un conteneur `backup` qui sauvegarde chaque nuit la base SQLite et, si vous utilisez l'analyse IA, le dossier `data/photos/` (photos des étiquettes) dans `./backups/`, vérifie le résultat et ne garde que les dernières copies (`BACKUP_RETENTION`, `BACKUP_SCHEDULE`). Pensez à copier `backups/` hors de la machine. La sauvegarde à la demande, la restauration et les détails sont dans [docs/BACKUP.md](docs/BACKUP.md).
 
 ## Mise à jour
 
