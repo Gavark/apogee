@@ -33,7 +33,7 @@ export function computePhase(w: WindowYears, year: number): Phase {
   return 'ready';
 }
 
-/** Calendar year in the given IANA time zone. */
+/** Calendar year in the given IANA time zone. Throws RangeError for an invalid zone. */
 export function currentYear(timeZone: string, now: Date = new Date()): number {
   const year = new Intl.DateTimeFormat('en', { timeZone, year: 'numeric' }).format(now);
   return Number(year);
@@ -47,10 +47,14 @@ export type WindowError = {
 /**
  * Validates a manually entered window. `refYear` is the vintage, or the
  * cellar-entry year for a non-vintage wine. All-empty is valid (phase unknown).
+ * A peak without a drinking window is `partial` on drinkFrom (checked first).
+ * Precondition: years are integers or null (parsed upstream).
  */
 export function validateWindow(w: WindowYears, refYear: number | null): WindowError | null {
   const { drinkFrom, peakFrom, peakTo, drinkUntil } = w;
 
+  if (drinkFrom === null && drinkUntil === null && (peakFrom !== null || peakTo !== null))
+    return { field: 'drinkFrom', reason: 'partial' };
   if (drinkFrom === null && drinkUntil !== null) return { field: 'drinkFrom', reason: 'partial' };
   if (drinkFrom !== null && drinkUntil === null) return { field: 'drinkUntil', reason: 'partial' };
   if (peakFrom === null && peakTo !== null) return { field: 'peakFrom', reason: 'partial' };
@@ -64,9 +68,6 @@ export function validateWindow(w: WindowYears, refYear: number | null): WindowEr
       return { field: 'drinkUntil', reason: 'order' };
     }
     if (refYear !== null && drinkFrom < refYear) return { field: 'drinkFrom', reason: 'before_ref' };
-  } else if (peakFrom !== null && peakTo !== null && peakFrom > peakTo) {
-    // Peak given without a drinking window: still keep the peak itself coherent.
-    return { field: 'peakFrom', reason: 'order' };
   }
   return null;
 }

@@ -98,6 +98,17 @@ describe('validateWindow', () => {
       .toEqual({ field: 'drinkUntil', reason: 'order' });
   });
 
+  it('pic sans fenêtre de dégustation → partial sur drinkFrom (prioritaire)', () => {
+    expect(validateWindow({ ...empty, peakFrom: 2025, peakTo: 2030 }, 2018)).toEqual({
+      field: 'drinkFrom',
+      reason: 'partial'
+    });
+    expect(validateWindow({ ...empty, peakFrom: 2025 }, 2018)).toEqual({
+      field: 'drinkFrom',
+      reason: 'partial'
+    });
+  });
+
   it('bornes égales acceptées', () => {
     expect(validateWindow({ drinkFrom: 2022, peakFrom: 2022, peakTo: 2034, drinkUntil: 2034 }, 2018)).toBeNull();
   });
