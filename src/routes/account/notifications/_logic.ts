@@ -52,6 +52,7 @@ export async function sendTestNotification(
   locale: 'fr' | 'en',
   sender?: PushSender
 ): Promise<{ sent: number; dead: number; failed: number } | null> {
+  if (listSubscriptionsForUser(db, userId).length === 0) return { sent: 0, dead: 0, failed: 0 };
   if (!rateLimit(testRateKey(userId), TEST_LIMIT_PER_HOUR, 3600)) return null;
   const payload: PushPayload = {
     title: 'Apogée',

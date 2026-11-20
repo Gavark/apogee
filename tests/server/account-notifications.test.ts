@@ -76,4 +76,13 @@ describe('account notifications', () => {
     registerSubscription(tdb.db, otherId, sub('https://push.test/b'));
     expect(await sendTestNotification(tdb.db, otherId, 'fr', sender)).toEqual({ sent: 1, dead: 0, failed: 0 });
   });
+
+  it('without any device, a test notification does not consume the rate-limit slot', async () => {
+    const sender = vi.fn<PushSender>(async () => ({ statusCode: 201 }));
+    for (let i = 0; i < TEST_LIMIT_PER_HOUR + 2; i++) {
+      expect(await sendTestNotification(tdb.db, userId, 'fr', sender)).toEqual({ sent: 0, dead: 0, failed: 0 });
+    }
+    registerSubscription(tdb.db, userId, sub('https://push.test/a'));
+    expect(await sendTestNotification(tdb.db, userId, 'fr', sender)).toEqual({ sent: 1, dead: 0, failed: 0 });
+  });
 });

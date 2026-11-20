@@ -139,4 +139,17 @@ describe('formatDigest', () => {
       'This month, 4 bottles not to forget: A, B'
     );
   });
+
+  it("n'compte pas les événements d'un autre foyer", () => {
+    const other = makeHousehold(tdb);
+    const otherLoc = makeLocation(tdb, other, 'Cave');
+    const id = tdb.db
+      .insert(tdb.schema.wines)
+      .values({ householdId: other, producer: 'Autre', formatCl: 75, vintage: 2015, identityKey: 'autre', drinkFrom: 2015, peakFrom: 2020, peakTo: 2030, drinkUntil: 2040 })
+      .returning({ id: tdb.schema.wines.id })
+      .get().id;
+    tdb.db.insert(tdb.schema.stockLots).values({ wineId: id, locationId: otherLoc, position: '', quantity: 3 }).run();
+    event(id, 'peak', 100);
+    expect(buildDigest(tdb.db, user({ notifyMonthly: 0 }), '2027-01', YEAR)).toBeNull();
+  });
 });
