@@ -20,6 +20,7 @@ const MAX_RESULTS = 200;
  * never flashes back to its old value.
  * `stored`: written to IndexedDB (a tracked op not stored yet is not "gone from the queue").
  * `hidden`: undone by the user but maybe already applied: kept queued, no longer shown.
+ * Everything here belongs to one user (`owner`): another user in the tab starts from a clean slate.
  */
 type Entry = { op: StockOp; gen: number | null; stored: boolean; hidden?: boolean };
 
@@ -34,8 +35,24 @@ const results = new Map<string, OpResult>();
 const claimed = new Set<string>();
 /** Gestures undone while their fate was unknown: their inverse is sent once their result arrives. */
 const undoOnResult = new Map<string, StockOp>();
+/** The user the state above belongs to. */
+let owner: number | null = null;
 /** The follow-ups (queue re-read, warning, reload) of the syncs, chained in order. */
 let settling: Promise<void> = Promise.resolve();
+
+/**
+ * Makes `userId` the owner of the pending state. When it changes (another account logged in in this
+ * tab), the previous user's entries, results and pending undos are dropped from memory: their queue
+ * rows stay in IndexedDB, untouched, and are never sent under the new account.
+ */
+export function usePendingFor(userId: number): void {
+  if (owner === userId) return;
+  owner = userId;
+  version++;
+  state.entries = [];
+  results.clear();
+  undoOnResult.clear();
+}
 
 /** Ops to overlay on the page data (reactive). */
 export function pendingOps(): StockOp[] {
@@ -144,9 +161,10 @@ export async function reload(): Promise<void> {
  */
 export async function refreshPending(userId: number): Promise<StockOp[]> {
   for (let i = 0; i < 3; i++) {
+    if (userId !== owner) return []; // a late follow-up for a previous user
     const v = version;
     const queued = await listQueued(userId);
-    if (v !== version) continue; // changed meanwhile: read again
+    if (v !== version) continue; // changed meanwhile (maybe the user): check again
     const inQueue = new Map(queued.map((q) => [q.op.opId, q.op]));
     const vanished: StockOp[] = [];
     const kept = state.entries.flatMap((e): Entry[] => {
@@ -176,6 +194,7 @@ export function requestBackgroundSync(): void {
 
 // Every sync that runs in this tab feeds the results and the overlay, whoever started it.
 onSyncOutcome((userId, out) => {
+  if (userId !== owner) return; // not the state on screen
   applyResults(
     out.results,
     out.dropped.map((o) => o.opId)
@@ -203,14 +222,19 @@ onSyncOutcome((userId, out) => {
  * Queues and sends ops on the user's behalf: inverses of gestures undone while uncertain, or such
  * a gesture replayed (idempotent) to learn its result. They stay queued if the network fails again.
  */
-async function sendQuietly(userId: number, ops: StockOp[]): Promise<void> {
+async function sendQuietly(userId: number, ops: StockOp[]): Promise<StockOp[]> {
+  if (userId !== owner) return []; // only ever on behalf of the user the ops belong to
   const release = claimOps(ops); // reported by the reload below, not by a warning
   try {
     trackOps(ops);
-    for (const op of ops) await enqueue(userId, op);
+    const added: StockOp[] = [];
+    for (const op of ops) if (await enqueue(userId, op)) added.push(op);
     markStored(ops.map((o) => o.opId));
-    await syncIdle(); // the sync that brought the results may still hold the lock
-    await syncNow(userId);
+    if (added.length > 0) {
+      await syncIdle(); // the sync that brought the results may still hold the lock
+      await syncNow(userId);
+    }
+    return added;
   } finally {
     release();
   }
@@ -227,11 +251,22 @@ async function afterSync(
   inverses: StockOp[],
   changed: boolean
 ): Promise<void> {
+  if (userId !== owner) return; // the user changed since: nothing of theirs on screen any more
   if (inverses.length > 0) await sendQuietly(userId, inverses).catch(() => {});
   const vanished = await refreshPending(userId).catch((): StockOp[] => []);
   // An undone gesture sent by another context: its result is unknown here, replay it to get it.
   const replay = vanished.filter((op) => undoOnResult.has(op.opId));
-  if (replay.length > 0) await sendQuietly(userId, replay).catch(() => {});
+  if (replay.length > 0) {
+    const added = new Set((await sendQuietly(userId, replay).catch((): StockOp[] => [])).map((o) => o.opId));
+    // Not re-queued (its opId is held by another row, or the user changed): its result cannot be
+    // learnt from here. Give up on that undo rather than replay forever; the reload shows the truth.
+    const lost = replay.filter((o) => !added.has(o.opId)).map((o) => o.opId);
+    if (lost.length > 0) {
+      for (const id of lost) undoOnResult.delete(id);
+      version++;
+      state.entries = state.entries.map((e) => (lost.includes(e.op.opId) && e.gen === null ? { ...e, gen: ++gen } : e));
+    }
+  }
   if (!changed && vanished.length === 0) return;
   const emptied = others.some((r) => r.status === 'partial' || (r.status === 'rejected' && r.reason === 'empty_lot'));
   const failed = othersDropped.length > 0 || others.some((r) => r.status === 'rejected' && r.reason !== 'empty_lot');
@@ -258,6 +293,7 @@ export async function syncPending(userId: number): Promise<SyncOutcome> {
  * tab becomes visible, and every 30 s while gestures wait. Returns the stop function.
  */
 export function startSyncLoop(userId: number): () => void {
+  usePendingFor(userId);
   const run = () => void syncPending(userId).catch(() => {});
   const onVisible = () => {
     if (document.visibilityState === 'visible') run();
@@ -283,6 +319,7 @@ export function startSyncLoop(userId: number): () => void {
 
 /** Test helper. */
 export function _resetPendingForTests(): void {
+  owner = null;
   state.entries = [];
   results.clear();
   claimed.clear();

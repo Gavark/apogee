@@ -15,7 +15,8 @@ import {
   requestBackgroundSync,
   resultFor,
   trackOps,
-  undoWhenSynced
+  undoWhenSynced,
+  usePendingFor
 } from '$lib/offline/pending.svelte';
 import { showToast } from '$lib/toast.svelte';
 import type { OpResult, StockOp } from '$lib/server/stock';
@@ -64,6 +65,7 @@ export async function sendStockOps(ops: StockOp[]): Promise<ClientOpResult[]> {
   const userId = currentUserId();
   if (userId === undefined) return sendDirect(ops);
 
+  usePendingFor(userId);
   trackOps(ops);
   const release = claimOps(ops);
   try {
@@ -106,6 +108,7 @@ export async function sendStockOps(ops: StockOp[]): Promise<ClientOpResult[]> {
 export async function undoStockOp(op: StockOp): Promise<ClientOpResult | 'unqueued' | 'deferred' | null> {
   const userId = currentUserId();
   if (userId !== undefined) {
+    usePendingFor(userId); // another user's gesture: not in this queue, no result kept → null
     // Under the sync lock: the op cannot be on its way to the server while we look.
     const step = await withSyncLock(async () => {
       const q = (await listQueued(userId)).find((x) => x.op.opId === op.opId);

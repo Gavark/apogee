@@ -77,11 +77,13 @@ async function allForUser(store: IDBObjectStore, userId: number): Promise<Stored
   return rows.sort((a, b) => a.queuedAt - b.queuedAt || a.seq - b.seq);
 }
 
-export function enqueue(userId: number, op: StockOp): Promise<void> {
+/** Resolves true when the op was added, false when that opId was already queued (the original is kept). */
+export function enqueue(userId: number, op: StockOp): Promise<boolean> {
   return tx('readwrite', async (store) => {
-    if (await wrap(store.getKey(op.opId))) return; // keep the original
+    if (await wrap(store.getKey(op.opId))) return false; // keep the original
     const row: Stored = { op, userId, queuedAt: Date.now(), attempts: 0, seq: ++seqCounter };
     await wrap(store.add(row));
+    return true;
   });
 }
 

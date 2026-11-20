@@ -279,6 +279,91 @@ describe('synchronisation par un autre contexte', () => {
   });
 });
 
+describe('changement d’utilisateur dans le même onglet', () => {
+  it('A a une annulation différée, puis B se connecte → rien de A n’est envoyé, pas de boucle, rien en attente pour B', async () => {
+    page.data = { user: { id: 1 } };
+    const g = consume('a');
+    offline();
+    await sendStockOps([g]);
+    await expect(undoStockOp(g)).resolves.toBe('deferred');
+
+    page.data = { user: { id: 2 } };
+    vi.stubGlobal('window', new EventTarget());
+    vi.stubGlobal('document', Object.assign(new EventTarget(), { visibilityState: 'visible' }));
+    const s = serve();
+    invalidateAll.mockClear();
+    const stop = startSyncLoop(2);
+    try {
+      await vi.waitFor(() => expect(pendingCount()).toBe(0));
+      await syncPending(2); // must settle: no endless replay chain
+      expect(s.fetch).not.toHaveBeenCalled();
+      expect(invalidateAll.mock.calls.length).toBeLessThanOrEqual(1);
+      expect(pendingOps()).toEqual([]);
+      const q = await listQueued(1);
+      expect(q).toHaveLength(1);
+      expect(q[0]).toMatchObject({ userId: 1, attempts: 1, op: { opId: 'a' } });
+      expect(await listQueued(2)).toEqual([]);
+    } finally {
+      stop();
+    }
+  });
+
+  it('un geste de A envoyé ailleurs n’est jamais remis en file sous B', async () => {
+    page.data = { user: { id: 1 } };
+    const g = consume('a');
+    offline();
+    await sendStockOps([g]);
+    await expect(undoStockOp(g)).resolves.toBe('deferred');
+    await removeQueued(['a']); // A's row gone
+    page.data = { user: { id: 2 } };
+    vi.stubGlobal('window', new EventTarget());
+    vi.stubGlobal('document', Object.assign(new EventTarget(), { visibilityState: 'visible' }));
+    const s = serve();
+    const stop = startSyncLoop(2);
+    try {
+      await syncPending(2);
+      await syncPending(2);
+      expect(s.fetch).not.toHaveBeenCalled();
+      expect(await listQueued(2)).toEqual([]);
+      expect(pendingCount()).toBe(0);
+    } finally {
+      stop();
+    }
+  });
+
+  it('les résultats de A ne servent pas à annuler sous B', async () => {
+    page.data = { user: { id: 1 } };
+    const g = consume('a');
+    serve((o) => ({ opId: o.opId, status: 'applied', consumptionId: 5 }));
+    await sendStockOps([g]); // applied for A, result known
+    page.data = { user: { id: 2 } };
+    const s = serve();
+    await expect(undoStockOp(g)).resolves.toBeNull();
+    expect(s.fetch).not.toHaveBeenCalled();
+  });
+
+  it('gestes en attente de A : invisibles pour B, sans rechargement', async () => {
+    page.data = { user: { id: 1 } };
+    offline();
+    await sendStockOps([consume('a')]);
+    page.data = { user: { id: 2 } };
+    vi.stubGlobal('window', new EventTarget());
+    vi.stubGlobal('document', Object.assign(new EventTarget(), { visibilityState: 'visible' }));
+    invalidateAll.mockClear();
+    const stop = startSyncLoop(2);
+    try {
+      expect(pendingOps()).toEqual([]);
+      await syncPending(2);
+      await syncPending(2);
+      expect(pendingOps()).toEqual([]);
+      expect(invalidateAll).not.toHaveBeenCalled();
+    } finally {
+      stop();
+    }
+    expect((await listQueued(1)).map((q) => q.op.opId)).toEqual(['a']);
+  });
+});
+
 describe('startSyncLoop', () => {
   beforeEach(() => (page.data = { user: { id: 1 } }));
 
