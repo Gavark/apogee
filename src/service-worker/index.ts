@@ -7,7 +7,6 @@ declare const self: ServiceWorkerGlobalScope;
 
 // Precache the hashed app assets plus the static files the shell needs
 // (icons, manifest). HTML is never cached, so pages still need the network.
-// Push handlers arrive with the notifications plan.
 const CACHE = `apogee-${version}`;
 // $app/manifest paths are relative to the base path. Resolve them against the
 // service worker's own URL, which sits at the base path, so the fetch handler
@@ -45,4 +44,47 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
   if (url.origin !== self.location.origin || !PRECACHED.has(url.pathname)) return;
   event.respondWith(caches.match(event.request).then((hit) => hit ?? fetch(event.request)));
+});
+
+type PushPayload = { title: string; body: string; url: string; tag: string };
+
+// Always show the notification: the server already limits it to one a day.
+self.addEventListener('push', (event) => {
+  if (!event.data) return;
+  let p: PushPayload;
+  try {
+    p = event.data.json() as PushPayload;
+  } catch {
+    return;
+  }
+  event.waitUntil(
+    self.registration.showNotification(p.title, {
+      body: p.body,
+      icon: '/icon-192.png',
+      badge: '/icon-192.png',
+      tag: p.tag,
+      data: { url: p.url }
+    })
+  );
+});
+
+// Focus an open Apogée window and send it to the target, else open a new one.
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const path = (event.notification.data as { url?: string } | undefined)?.url ?? '/app';
+  const target = new URL(path, self.location.origin).href;
+  event.waitUntil(
+    (async () => {
+      const windows = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+      const existing = windows.find((c) => new URL(c.url).origin === self.location.origin) as
+        | WindowClient
+        | undefined;
+      if (existing) {
+        await existing.focus();
+        if (existing.url !== target) await existing.navigate(target);
+        return;
+      }
+      await self.clients.openWindow(target);
+    })()
+  );
 });

@@ -4,6 +4,7 @@
   import SignOut from 'phosphor-svelte/lib/SignOut';
   import UsersThree from 'phosphor-svelte/lib/UsersThree';
   import ShieldCheck from 'phosphor-svelte/lib/ShieldCheck';
+  import Bell from 'phosphor-svelte/lib/Bell';
   import MapPin from 'phosphor-svelte/lib/MapPin';
   import * as m from '$paraglide/messages';
   import BottomNav from '$lib/components/BottomNav.svelte';
@@ -42,6 +43,14 @@
       <span class="nav-text">
         <strong>{m.loc_page_title()}</strong>
         <span class="muted">{m.account_locations_link()}</span>
+      </span>
+      <CaretRight size={18} aria-hidden="true" />
+    </a>
+    <a class="nav-card card" href="/account/notifications">
+      <Bell size={24} weight="duotone" aria-hidden="true" />
+      <span class="nav-text">
+        <strong>{m.account_notifications_title()}</strong>
+        <span class="muted">{m.account_notifications_link()}</span>
       </span>
       <CaretRight size={18} aria-hidden="true" />
     </a>

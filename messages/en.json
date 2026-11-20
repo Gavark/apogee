@@ -543,5 +543,34 @@
         "countPlural=*": "This month, {count} bottles not to forget: {names}"
       }
     }
-  ]
+  ],
+  "account_notifications_title": "Notifications",
+  "account_notifications_link": "Drinking phases and monthly reminder",
+  "notif_page_title": "Notifications",
+  "notif_test_body": "Notifications work on this device.",
+  "notif_prefs_title": "What I receive",
+  "notif_pref_phases": "Phase changes",
+  "notif_pref_phases_hint": "A wine enters its drinking window, reaches its peak or becomes drink-soon.",
+  "notif_pref_monthly": "Monthly reminder",
+  "notif_pref_monthly_hint": "Each month, the bottles not to forget.",
+  "notif_schedule_hint": "At most one notification a day, around 6 pm (your account's time zone: {timezone}).",
+  "notif_saved": "Preferences saved.",
+  "notif_this_device_title": "This device",
+  "notif_btn_enable": "Enable notifications",
+  "notif_btn_active": "Notifications are on for this device",
+  "notif_btn_denied": "Notifications are blocked for this site: allow them in your browser settings.",
+  "notif_btn_unsupported": "This browser does not support notifications.",
+  "notif_btn_ios_hint": "Install Apogée on your home screen to receive notifications.",
+  "notif_btn_error": "Could not enable notifications. Try again.",
+  "notif_devices_title": "Subscribed devices",
+  "notif_devices_none": "No subscribed devices.",
+  "notif_device_unknown": "Unknown device",
+  "notif_device_dates": "Added {added} · last sent {seen}",
+  "notif_device_remove": "Remove",
+  "notif_device_removed": "Device removed.",
+  "notif_test_button": "Send a test notification",
+  "notif_test_sent": "Test notification sent.",
+  "notif_test_no_device": "No subscribed device: enable notifications first.",
+  "notif_test_failed": "Sending failed. Try again in a moment.",
+  "notif_test_limit": "Limit reached: 3 test notifications per hour."
 }
