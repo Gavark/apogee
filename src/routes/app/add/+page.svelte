@@ -70,10 +70,8 @@
       : {}
   );
 
-  // A rejected analysis id (foreign or stale) must not be resent: the retry saves as a manual entry.
-  $effect(() => {
-    if (error?.field === 'analysisId' && captured && captured.analysisId !== null) captured.analysisId = null;
-  });
+  // The "analysis rejected" alert belongs to one submit: a new capture dismisses it (form persists until the next submit).
+  let staleDismissed = $state(false);
 
   function revoke() {
     if (captured) URL.revokeObjectURL(captured.preview);
@@ -87,6 +85,7 @@
       return;
     }
     captureError = null;
+    staleDismissed = true;
     // Replacing the photo starts the form afresh only when a new analysis pre-fills it.
     revoke();
     captured = { analysisId: outcome.analysisId, preview, outcome };
@@ -114,7 +113,11 @@
   );
 
   const afterSubmit: SubmitFunction = () => {
+    staleDismissed = false;
     return async ({ result, update }) => {
+      // Drop exactly the analysis the server rejected, so the retry saves as a manual entry.
+      if (result.type === 'failure' && (result.data as { error?: { field?: string } })?.error?.field === 'analysisId' && captured)
+        captured.analysisId = null;
       if (result.type === 'success') {
         const d = result.data as { wineId: number; locationId: number };
         // update() replaces form, so a stale duplicate warning cannot come back.
@@ -172,7 +175,7 @@
         </Card>
       {/if}
 
-      {#if error?.field === 'analysisId'}<Card role="alert"><p class="msg">{error.message}</p></Card>{/if}
+      {#if error?.field === 'analysisId' && !staleDismissed}<Card role="alert"><p class="msg">{error.message}</p></Card>{/if}
       {#if captured?.analysisId != null}
         <input type="hidden" name="analysisId" value={captured.analysisId} />
       {/if}
