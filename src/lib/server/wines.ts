@@ -6,6 +6,7 @@ import type { Wine } from './db/schema';
 import { getOwnedAnalysis } from './label-analyses';
 import { cleanupQuietly, deletePhoto, photosDir } from './photos';
 import type { AiConfidence } from './ai/types';
+import { WINE_FORMATS_CL, type Color } from '../wine-constants';
 import {
   HOME_SECTION_ORDER,
   computePhase,
@@ -19,7 +20,7 @@ type DB = BaseSQLiteDatabase<'sync', unknown, typeof schema>;
 
 const { wines, stockLots, locations, consumptions, users } = schema;
 
-export type Color = 'red' | 'white' | 'rose' | 'sparkling' | 'sweet' | 'fortified';
+export type { Color };
 
 export type WineInput = {
   producer: string | null;
@@ -50,7 +51,7 @@ export type LotInput = { locationId: number; position: string; quantity: number 
 
 export type WineInputError = { field: string; reason: 'required' | 'invalid' | WindowError['reason'] };
 
-export const WINE_FORMATS_CL = [37, 50, 75, 150, 300, 600];
+export { WINE_FORMATS_CL };
 export const MIN_VINTAGE = 1900;
 export const MAX_LOT_QUANTITY = 10000;
 export const MAX_TEXT_LEN = 200;

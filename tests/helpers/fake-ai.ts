@@ -20,7 +20,10 @@ export function sampleAnalysis(overrides: Partial<LabelAnalysis> = {}): LabelAna
 }
 
 /** A provider that returns `result`, or throws it when it is an AiError. Records every call. */
-export function fakeProvider(result: LabelAnalysis | AiError): AiProvider & { calls: AnalyzeInput[] } {
+export function fakeProvider(
+  result: LabelAnalysis | AiError,
+  servedModel = 'fake-model'
+): AiProvider & { calls: AnalyzeInput[] } {
   const calls: AnalyzeInput[] = [];
   return {
     name: 'fake',
@@ -29,7 +32,7 @@ export function fakeProvider(result: LabelAnalysis | AiError): AiProvider & { ca
     async analyzeLabel(input: AnalyzeInput) {
       calls.push(input);
       if (result instanceof AiError) throw result;
-      return result;
+      return { analysis: result, model: servedModel };
     }
   };
 }

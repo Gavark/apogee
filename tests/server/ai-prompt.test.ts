@@ -13,7 +13,8 @@ describe('buildLabelPrompt', () => {
 
   it("NV : l'année d'entrée en cave est donnée comme référence", () => {
     const { user } = buildLabelPrompt({ ...base, hints: { vintage: null, acquiredYear: 2024 } });
-    expect(user).toContain("année d'entrée en cave : 2024");
+    expect(user).toContain("Année d'entrée en cave : 2024");
+    expect(user).not.toContain('non millésimé');
     const v = buildLabelPrompt({ ...base, hints: { vintage: 2018, acquiredYear: 2024 } }).user;
     expect(v).not.toContain('entrée en cave');
   });

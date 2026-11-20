@@ -40,12 +40,12 @@ export function readAiConfig(env: Env): AiConfig {
     let valid = false;
     try {
       const u = new URL(rawUrl);
-      valid = (u.protocol === 'http:' || u.protocol === 'https:') && !u.username && !u.password;
+      valid = (u.protocol === 'http:' || u.protocol === 'https:') && !u.username && !u.password && !u.search && !u.hash;
     } catch {
       valid = false;
     }
     if (!valid || !model) {
-      warnOnce('AI_PROVIDER=openai-compatible requires a valid http(s) AI_BASE_URL without credentials, and AI_MODEL; AI disabled.');
+      warnOnce('AI_PROVIDER=openai-compatible requires a valid http(s) AI_BASE_URL without credentials, query string or fragment, and AI_MODEL; AI disabled.');
       return { provider: 'none' };
     }
     return {

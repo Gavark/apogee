@@ -73,7 +73,7 @@ describe('normalizeAnalysis', () => {
     );
     expect(a.window).toEqual(NULL_WINDOW);
     const ok = normalizeAnalysis(
-      { window: { drink_from: 1900, peak_from: null, peak_to: null, drink_until: Y + 80 } },
+      { vintage: 1900, window: { drink_from: 1900, peak_from: null, peak_to: null, drink_until: Y + 80 } },
       opts
     );
     expect(ok.window).toMatchObject({ drinkFrom: 1900, drinkUntil: Y + 80 });
@@ -163,5 +163,43 @@ describe('AiError', () => {
     expect(e.name).toBe('AiError');
     expect(e.code).toBe('rate_limited');
     expect(e.status).toBe(429);
+  });
+});
+
+describe('LABEL_JSON_SCHEMA structure', () => {
+  type Node = Record<string, any>;
+  const walk = (n: Node, f: (n: Node) => void) => {
+    f(n);
+    for (const v of Object.values(n.properties ?? {})) walk(v as Node, f);
+  };
+
+  it('au plus 16 paramètres à type union (tableau) ou anyOf, dans tout le schéma', () => {
+    let unions = 0;
+    walk(LABEL_JSON_SCHEMA, (n) => {
+      if (Array.isArray(n.type) || n.anyOf) unions++;
+    });
+    expect(unions).toBeLessThanOrEqual(16);
+  });
+
+  it('chaque objet : additionalProperties false et toutes les propriétés requises', () => {
+    let objects = 0;
+    walk(LABEL_JSON_SCHEMA, (n) => {
+      if (n.type !== 'object') return;
+      objects++;
+      expect(n.additionalProperties).toBe(false);
+      expect([...n.required].sort()).toEqual(Object.keys(n.properties).sort());
+    });
+    expect(objects).toBe(2);
+  });
+});
+
+describe('normalizeAnalysis : référence de fenêtre', () => {
+  it("millésime et acquiredYear absents : l'année courante sert de référence", () => {
+    const future = { drink_from: Y + 1, peak_from: null, peak_to: null, drink_until: Y + 10 };
+    const ok = normalizeAnalysis({ vintage: null, window: future }, { currentYear: Y, acquiredYear: null });
+    expect(ok.window).toEqual({ drinkFrom: Y + 1, peakFrom: null, peakTo: null, drinkUntil: Y + 10 });
+    const past = { drink_from: Y - 6, peak_from: null, peak_to: null, drink_until: Y + 4 };
+    const bad = normalizeAnalysis({ vintage: null, window: past }, { currentYear: Y, acquiredYear: null });
+    expect(bad.window).toEqual(NULL_WINDOW);
   });
 });

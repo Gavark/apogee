@@ -11,6 +11,7 @@
   import WineForm from '$lib/components/WineForm.svelte';
   import LabelCapture from '$lib/components/LabelCapture.svelte';
   import { aiErrorMessage } from '$lib/wine-labels';
+  import { WINE_FORMATS_CL } from '$lib/wine-constants';
   import type { AnalysisOutcome } from '$lib/server/label-analyses';
 
   let { data, form } = $props();
@@ -39,7 +40,7 @@
   });
 
   const str = (x: string | number | null | undefined) => (x === null || x === undefined ? '' : String(x));
-  const FORMATS = ['37', '50', '75', '150', '300', '600'];
+  const FORMATS = WINE_FORMATS_CL.map(String);
   const prefill = $derived<Record<string, string>>(
     label
       ? {

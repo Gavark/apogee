@@ -28,7 +28,7 @@ export function buildLabelPrompt(input: PromptInput): { system: string; user: st
   if (known.length) lines.push(`Indices connus — ${known.join(' ; ')}.`);
   if (h.vintage == null && h.acquiredYear != null)
     lines.push(
-      `Vin non millésimé, année d'entrée en cave : ${h.acquiredYear}, raisonne à partir de cette année.`
+      `Année d'entrée en cave : ${h.acquiredYear}. Le millésime n'est pas connu d'avance : lis-le sur l'étiquette, et s'il n'y en a pas, raisonne à partir de cette année.`
     );
   lines.push(
     input.hasImage

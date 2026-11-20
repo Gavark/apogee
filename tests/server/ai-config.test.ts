@@ -31,6 +31,19 @@ describe('readAiConfig', () => {
     expect(
       readAiConfig({ AI_PROVIDER: 'openai-compatible', AI_BASE_URL: 'http://h/v1', AI_MODEL: 'm' })
     ).toEqual({ provider: 'openai-compatible', apiKey: null, model: 'm', baseUrl: 'http://h/v1' }));
+  it('AI_BASE_URL avec query string ou fragment → none', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      for (const u of ['http://h/v1?key=1', 'http://h/v1#x']) {
+        _resetAiProviderForTests();
+        expect(readAiConfig({ AI_PROVIDER: 'openai-compatible', AI_BASE_URL: u, AI_MODEL: 'm' })).toEqual({ provider: 'none' });
+      }
+      expect(warn).toHaveBeenCalledTimes(2);
+      expect(warn.mock.calls.flat().join(' ')).not.toContain('key=1');
+    } finally {
+      warn.mockRestore();
+    }
+  });
   it('baseUrl : / final retiré ; schéma non http(s) refusé', () => {
     const ok = readAiConfig({
       AI_PROVIDER: 'openai-compatible',

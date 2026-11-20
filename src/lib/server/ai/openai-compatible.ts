@@ -13,7 +13,7 @@ export function createOpenAiCompatibleProvider(opts: {
   return {
     name: 'openai-compatible',
     model: opts.model,
-    async analyzeLabel(input: AnalyzeInput): Promise<LabelAnalysis> {
+    async analyzeLabel(input: AnalyzeInput): Promise<{ analysis: LabelAnalysis; model: string }> {
       const { system, user } = buildLabelPrompt({
         hints: input.hints,
         locale: input.locale,
@@ -59,7 +59,7 @@ export function createOpenAiCompatibleProvider(opts: {
         throw new AiError('unavailable', res.status);
       }
 
-      let data: { choices?: { message?: { content?: unknown } }[] };
+      let data: { model?: unknown; choices?: { message?: { content?: unknown } }[] };
       try {
         data = (await res.json()) as typeof data;
       } catch (err) {
@@ -76,10 +76,11 @@ export function createOpenAiCompatibleProvider(opts: {
       } catch {
         throw new AiError('invalid_response');
       }
-      return normalizeAnalysis(raw, {
+      const analysis = normalizeAnalysis(raw, {
         currentYear: input.currentYear,
         acquiredYear: input.hints?.acquiredYear ?? null
       });
+      return { analysis, model: typeof data.model === 'string' && data.model ? data.model : opts.model };
     }
   };
 }

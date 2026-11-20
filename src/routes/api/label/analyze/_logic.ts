@@ -5,13 +5,13 @@ import { analyzeAndStore } from '$lib/server/label-analyses';
 import { MAX_PHOTO_BYTES } from '$lib/server/photos';
 import { findOwnedWine } from '$lib/server/wines';
 import type { AiProvider, LabelHints } from '$lib/server/ai/types';
+import { COLORS } from '$lib/wine-constants';
 
 type DB = BaseSQLiteDatabase<'sync', unknown, typeof schema>;
 
 const MAX_HINT_LEN = 200;
 const TEXT_KEYS = ['producer', 'cuvee', 'appellation'] as const;
 const INT_KEYS = ['vintage', 'formatCl', 'acquiredYear'] as const;
-const COLORS = ['red', 'white', 'rose', 'sparkling', 'sweet', 'fortified'];
 
 /** Lenient hints parser: keeps only known keys with the right primitive type. null when not a JSON object. */
 export function parseHints(raw: string): LabelHints | null {
@@ -35,7 +35,7 @@ export function parseHints(raw: string): LabelHints | null {
     const n = o[k];
     if (typeof n === 'number' && Number.isInteger(n)) out[k] = n;
   }
-  if (typeof o.color === 'string' && COLORS.includes(o.color)) out.color = o.color as LabelHints['color'];
+  if (typeof o.color === 'string' && (COLORS as string[]).includes(o.color)) out.color = o.color as LabelHints['color'];
   return out;
 }
 

@@ -34,13 +34,13 @@ export async function testAiProvider(provider: AiProvider | null): Promise<AiTes
   if (!provider) return { ok: false, error: 'not_configured' };
   const started = performance.now();
   try {
-    await provider.analyzeLabel({
+    const { model } = await provider.analyzeLabel({
       image: null,
       hints: { producer: 'Château Margaux', appellation: 'Margaux', color: 'red', vintage: 2015 },
       locale: 'fr',
       currentYear: new Date().getFullYear()
     });
-    return { ok: true, model: provider.model, ms: Math.round(performance.now() - started) };
+    return { ok: true, model, ms: Math.round(performance.now() - started) };
   } catch (e) {
     return { ok: false, error: e instanceof AiError ? e.code : 'unavailable' };
   }

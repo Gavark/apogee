@@ -32,7 +32,7 @@ describe('openai-compatible provider', () => {
 
   it('POST {baseUrl}/chat/completions avec data URL, response_format json_object, Bearer', async () => {
     const { fetchMock, provider } = make(async () => reply(JSON.stringify(goodJson)));
-    const res = await provider.analyzeLabel(input);
+    const { analysis: res } = await provider.analyzeLabel(input);
     expect(res.producer).toBe('Domaine X');
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
     expect(url).toBe('http://host/v1/chat/completions');
@@ -118,9 +118,16 @@ describe('openai-compatible provider', () => {
     }
   });
 
+  it('modèle servi : json.model, sinon le modèle configuré', async () => {
+    const served = make(async () => new Response(JSON.stringify({ model: 'llava:13b', choices: [{ message: { content: JSON.stringify(goodJson) } }] })));
+    expect((await served.provider.analyzeLabel(input)).model).toBe('llava:13b');
+    const bare = make(async () => reply(JSON.stringify(goodJson)));
+    expect((await bare.provider.analyzeLabel(input)).model).toBe('llava');
+  });
+
   it('JSON valide → normalizeAnalysis appliqué (millésime futur rejeté)', async () => {
     const { provider } = make(async () => reply(JSON.stringify({ ...goodJson, vintage: 2999 })));
-    const res = await provider.analyzeLabel(input);
+    const { analysis: res } = await provider.analyzeLabel(input);
     expect(res.vintage).toBeNull();
     expect(res.confidence).toBe('medium');
   });

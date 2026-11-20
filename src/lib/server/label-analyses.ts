@@ -1,4 +1,4 @@
-import { and, eq, gte, isNotNull, sql } from 'drizzle-orm';
+import { and, eq, gte, inArray, isNotNull, or, sql } from 'drizzle-orm';
 import type { BaseSQLiteDatabase } from 'drizzle-orm/sqlite-core';
 import * as schema from './db/schema';
 import { NotFoundError, type HouseholdCtx } from './context';
@@ -39,7 +39,9 @@ function startOfLocalDay(now: Date, timeZone: string): number {
   return Math.floor(start / 1000);
 }
 
-/** Successful analyses (non-null result) of the household since local midnight. */
+const BILLED_ERRORS: string[] = ['invalid_response', 'refused'];
+
+/** Billed analyses (a result, or an unusable/refused answer) of the household since local midnight. */
 export function countAnalysesToday(db: DB, householdId: number, timeZone: string, now: Date = new Date()): number {
   const start = startOfLocalDay(now, timeZone);
   return db
@@ -48,7 +50,8 @@ export function countAnalysesToday(db: DB, householdId: number, timeZone: string
     .where(
       and(
         eq(labelAnalyses.householdId, householdId),
-        isNotNull(labelAnalyses.result),
+        // Billed failures (the provider answered but unusable) count; network/auth/rate-limit ones do not.
+        or(isNotNull(labelAnalyses.result), inArray(labelAnalyses.errorCode, BILLED_ERRORS)),
         gte(labelAnalyses.createdAt, start)
       )
     )
@@ -114,7 +117,7 @@ export async function analyzeAndStore(
   }
 
   try {
-    const analysis = await provider.analyzeLabel({
+    const { analysis, model } = await provider.analyzeLabel({
       image,
       hints: input.hints,
       locale: input.locale,
@@ -123,9 +126,9 @@ export async function analyzeAndStore(
     const analysisId = insertRow(db, ctx, {
       photoPath,
       result: JSON.stringify(analysis),
-      model: provider.model
+      model
     });
-    return { ok: true, analysisId, analysis, model: provider.model };
+    return { ok: true, analysisId, analysis, model };
   } catch (e) {
     let error: AiErrorCode = 'unavailable';
     if (!(e instanceof AiError)) console.error('label analysis failed:', e instanceof Error ? e.name : 'unknown');

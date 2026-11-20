@@ -1,5 +1,5 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { mkdtempSync, rmSync, existsSync, readFileSync } from 'node:fs';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { mkdtempSync, rmSync, existsSync, readFileSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
@@ -58,6 +58,19 @@ describe('photos', () => {
     expect([...r!.bytes]).toEqual([...PNG]);
     expect(readPhoto(dir, '1/00000000-0000-0000-0000-000000000000.png')).toBeNull();
     expect(readPhoto(dir, '../1/x.jpg')).toBeNull();
+  });
+
+  it('readPhoto : erreur autre qu’ENOENT (EISDIR) → null, journalisée sans chemin', () => {
+    const rel = '1/22222222-2222-4222-8222-222222222222.jpg';
+    mkdirSync(join(dir, rel), { recursive: true });
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      expect(readPhoto(dir, rel)).toBeNull();
+      expect(spy).toHaveBeenCalledTimes(1);
+      expect(spy.mock.calls.flat().every((a) => !String(a).includes(dir))).toBe(true);
+    } finally {
+      spy.mockRestore();
+    }
   });
 
   it('isSafeRelPath refuse "../1/x.jpg", "1/../../etc", un chemin absolu', () => {

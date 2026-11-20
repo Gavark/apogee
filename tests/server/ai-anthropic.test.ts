@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import Anthropic from '@anthropic-ai/sdk';
-import { createAnthropicProvider } from '$lib/server/ai/anthropic';
+import { createAnthropicClient, createAnthropicProvider } from '$lib/server/ai/anthropic';
 import { AiError, type AnalyzeInput } from '$lib/server/ai/types';
 import { LABEL_JSON_SCHEMA } from '$lib/server/ai/contract';
 
@@ -46,12 +46,12 @@ describe('anthropic provider', () => {
 
   it('envoie modèle, fallbacks default, beta, effort medium, json_schema, image avant texte', async () => {
     const { create, provider } = setup(ok(JSON.stringify(goodJson)));
-    const res = await provider.analyzeLabel(input);
+    const { analysis: res } = await provider.analyzeLabel(input);
     expect(res.producer).toBe('Domaine X');
     expect(create).toHaveBeenCalledTimes(1);
     const arg = firstArg(create);
     expect(arg.model).toBe('claude-opus-5-5');
-    expect(arg.max_tokens).toBe(4096);
+    expect(arg.max_tokens).toBe(16000);
     expect(arg.betas).toEqual(['server-side-fallback-2026-07-01']);
     expect(arg.fallbacks).toBe('default');
     expect(arg.output_config).toEqual({
@@ -67,6 +67,19 @@ describe('anthropic provider', () => {
       source: { type: 'base64', media_type: 'image/png', data: Buffer.from([1, 2, 3]).toString('base64') }
     });
     expect(content[1].type).toBe('text');
+  });
+
+  it('renvoie le modèle réellement servi (message.model), sinon le modèle configuré', async () => {
+    const served = setup({ ...ok(JSON.stringify(goodJson)), model: 'claude-fallback-x' });
+    expect((await served.provider.analyzeLabel(input)).model).toBe('claude-fallback-x');
+    const bare = setup(ok(JSON.stringify(goodJson)));
+    expect((await bare.provider.analyzeLabel(input)).model).toBe('claude-opus-5-5');
+  });
+
+  it('client SDK : timeout 30 s, un seul retry (attente sur téléphone)', () => {
+    const c = createAnthropicClient(KEY);
+    expect(c.timeout).toBe(30_000);
+    expect(c.maxRetries).toBe(1);
   });
 
   it("n'envoie pas de paramètre thinking, temperature, top_p, top_k", async () => {
@@ -95,7 +108,7 @@ describe('anthropic provider', () => {
         { type: 'text', text: json.slice(10) }
       ]
     });
-    expect((await provider.analyzeLabel(input)).producer).toBe('Domaine X');
+    expect((await provider.analyzeLabel(input)).analysis.producer).toBe('Domaine X');
   });
 
   it('stop_reason refusal → AiError refused', async () => {

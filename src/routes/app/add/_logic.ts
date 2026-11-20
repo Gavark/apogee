@@ -16,9 +16,10 @@ import {
   type WineInputError
 } from '$lib/server/wines';
 
+import { COLORS } from '$lib/wine-constants';
+
 type DB = BaseSQLiteDatabase<'sync', unknown, typeof schema>;
 
-const COLORS: Color[] = ['red', 'white', 'rose', 'sparkling', 'sweet', 'fortified'];
 
 export type AddResult =
   | { ok: true; wineId: number }

@@ -145,6 +145,41 @@ describe('analyzeAndStore', () => {
     expect((await analyzeAndStore(tdb.db, ctx, ok, input({ dailyLimit: 0 }))).ok).toBe(true);
   });
 
+  it('invalid_response et refused (facturés) comptent dans la limite ; unavailable/auth/rate_limited non', async () => {
+    for (const code of ['unavailable', 'auth', 'rate_limited'] as const)
+      await analyzeAndStore(tdb.db, ctx, fakeProvider(new AiError(code)), input());
+    expect(countAnalysesToday(tdb.db, hid, 'Europe/Paris')).toBe(0);
+    await analyzeAndStore(tdb.db, ctx, fakeProvider(new AiError('invalid_response')), input());
+    expect(countAnalysesToday(tdb.db, hid, 'Europe/Paris')).toBe(1);
+    await analyzeAndStore(tdb.db, ctx, fakeProvider(new AiError('refused')), input());
+    expect(countAnalysesToday(tdb.db, hid, 'Europe/Paris')).toBe(2);
+    const ok = fakeProvider(sampleAnalysis());
+    const out = await analyzeAndStore(tdb.db, ctx, ok, input({ dailyLimit: 2 }));
+    expect(out).toMatchObject({ ok: false, error: 'limit_reached' });
+    expect(ok.calls).toHaveLength(0);
+  });
+
+  it('le modèle réellement servi est stocké (ligne et résultat)', async () => {
+    const out = await analyzeAndStore(tdb.db, ctx, fakeProvider(sampleAnalysis(), 'served-model'), input());
+    expect(out.ok && out.model).toBe('served-model');
+    expect(rows()[0].model).toBe('served-model');
+  });
+
+  it("photo existante illisible (EISDIR) → traitée comme sans photo, journalisée sans chemin, sans lever", async () => {
+    const rel = `${hid}/00000000-0000-4000-8000-000000000000.jpg`;
+    mkdirSync(join(dir, rel), { recursive: true });
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const p = fakeProvider(sampleAnalysis());
+      const out = await analyzeAndStore(tdb.db, ctx, p, input({ photo: null, existingPhotoPath: rel }));
+      expect(out.ok).toBe(true);
+      expect(p.calls[0].image).toBeNull();
+      expect(spy.mock.calls.flat().every((a) => !String(a).includes(dir))).toBe(true);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
   it('AiError unavailable → ok:false error unavailable, ligne enregistrée', async () => {
     const out = await analyzeAndStore(tdb.db, ctx, fakeProvider(new AiError('unavailable')), input());
     expect(out.ok).toBe(false);
@@ -285,6 +320,17 @@ describe('loadWinePhoto (route photo)', () => {
     expect([...r!.bytes]).toEqual([...JPEG]);
 
     expect(loadWinePhoto(tdb.db, ctx, noPhoto, dir)).toBeNull();
+
+    // unreadable (a directory where the file should be): 404, not a throw
+    const dirPath = `${hid}/11111111-1111-4111-8111-111111111111.jpg`;
+    mkdirSync(join(dir, dirPath), { recursive: true });
+    const unreadable = mkWine(ctx, 2017, dirPath);
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      expect(loadWinePhoto(tdb.db, ctx, unreadable, dir)).toBeNull();
+    } finally {
+      spy.mockRestore();
+    }
     expect(loadWinePhoto(tdb.db, ctx, 9999, dir)).toBeNull();
     const other = makeHousehold(tdb, 'Autre');
     const otherCtx = { userId: makeUser(tdb, other), householdId: other, isAdmin: false };

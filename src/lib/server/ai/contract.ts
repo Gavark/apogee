@@ -1,8 +1,8 @@
 import { validateWindow, type WindowYears } from '$lib/phase';
-import { MAX_TEXT_LEN, MIN_VINTAGE, WINE_FORMATS_CL, type Color } from '$lib/server/wines';
+import { MAX_TEXT_LEN, MIN_VINTAGE } from '$lib/server/wines';
+import { COLORS, WINE_FORMATS_CL, type Color } from '$lib/wine-constants';
 import { AiError, type AiConfidence, type LabelAnalysis } from './types';
 
-const COLORS: Color[] = ['red', 'white', 'rose', 'sparkling', 'sweet', 'fortified'];
 const CONFIDENCES: AiConfidence[] = ['low', 'medium', 'high'];
 const MAX_RATIONALE_LEN = 600;
 const WINDOW_MAX_AHEAD = 80;
@@ -85,7 +85,7 @@ export function normalizeAnalysis(
     peakTo: year(w.peak_to),
     drinkUntil: year(w.drink_until)
   };
-  if (validateWindow(window, vintage ?? opts.acquiredYear) !== null) window = { ...NULL_WINDOW };
+  if (validateWindow(window, vintage ?? opts.acquiredYear ?? opts.currentYear) !== null) window = { ...NULL_WINDOW };
 
   return {
     isWineLabel: true,

@@ -64,5 +64,6 @@ export interface AiProvider {
   readonly name: string;
   readonly model: string;
   /** Throws AiError. */
-  analyzeLabel(input: AnalyzeInput): Promise<LabelAnalysis>;
+  /** `model` is the model that actually answered (it can differ from the configured one after a fallback). */
+  analyzeLabel(input: AnalyzeInput): Promise<{ analysis: LabelAnalysis; model: string }>;
 }

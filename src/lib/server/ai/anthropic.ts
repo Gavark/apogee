@@ -15,14 +15,19 @@ function mapSdkError(err: unknown): AiError {
   return new AiError('unavailable');
 }
 
+/** Phone UX: fail fast (30 s, one retry) rather than hang for minutes. */
+export function createAnthropicClient(apiKey: string): Anthropic {
+  return new Anthropic({ apiKey, maxRetries: 1, timeout: 30_000 });
+}
+
 export function createAnthropicProvider(opts: { apiKey: string; model: string; client?: Client }): AiProvider {
   const client: Client =
-    opts.client ?? new Anthropic({ apiKey: opts.apiKey, maxRetries: 2, timeout: 60_000 });
+    opts.client ?? createAnthropicClient(opts.apiKey);
 
   return {
     name: 'anthropic',
     model: opts.model,
-    async analyzeLabel(input: AnalyzeInput): Promise<LabelAnalysis> {
+    async analyzeLabel(input: AnalyzeInput): Promise<{ analysis: LabelAnalysis; model: string }> {
       const { system, user } = buildLabelPrompt({
         hints: input.hints,
         locale: input.locale,
@@ -46,7 +51,7 @@ export function createAnthropicProvider(opts: { apiKey: string; model: string; c
       try {
         message = await client.beta.messages.create({
           model: opts.model,
-          max_tokens: 4096,
+          max_tokens: 16000,
           betas: ['server-side-fallback-2026-07-01'],
           fallbacks: 'default',
           output_config: { effort: 'medium', format: { type: 'json_schema', schema: LABEL_JSON_SCHEMA } },
@@ -70,10 +75,11 @@ export function createAnthropicProvider(opts: { apiKey: string; model: string; c
       } catch {
         throw new AiError('invalid_response');
       }
-      return normalizeAnalysis(raw, {
+      const analysis = normalizeAnalysis(raw, {
         currentYear: input.currentYear,
         acquiredYear: input.hints?.acquiredYear ?? null
       });
+      return { analysis, model: typeof message.model === 'string' && message.model ? message.model : opts.model };
     }
   };
 }

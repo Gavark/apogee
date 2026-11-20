@@ -67,8 +67,10 @@ export function readPhoto(dir: string, relPath: string): { bytes: Buffer; mime: 
     const mime = MIME_BY_EXT[relPath.slice(relPath.lastIndexOf('.') + 1)];
     return { bytes, mime };
   } catch (e) {
-    if ((e as NodeJS.ErrnoException).code === 'ENOENT') return null;
-    throw e;
+    const code = (e as NodeJS.ErrnoException).code;
+    // Unreadable (EACCES, EISDIR…) reads as "no photo": never a 500. Log the code only, no path.
+    if (code !== 'ENOENT') console.error('photo read failed:', typeof code === 'string' ? code : 'unknown');
+    return null;
   }
 }
 

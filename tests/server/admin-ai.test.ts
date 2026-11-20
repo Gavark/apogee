@@ -40,9 +40,9 @@ describe('aiStatus', () => {
 
 describe('testAiProvider', () => {
   it('ok avec le modèle et une durée, appel sans image avec indices fixes', async () => {
-    const p = fakeProvider(sampleAnalysis());
+    const p = fakeProvider(sampleAnalysis(), 'served-model');
     const r = await testAiProvider(p);
-    expect(r).toMatchObject({ ok: true, model: 'fake-model' });
+    expect(r).toMatchObject({ ok: true, model: 'served-model' });
     expect(r.ok && r.ms).toBeGreaterThanOrEqual(0);
     expect(p.calls).toHaveLength(1);
     expect(p.calls[0].image).toBeNull();

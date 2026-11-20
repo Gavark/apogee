@@ -3,11 +3,10 @@ import type * as schema from '$lib/server/db/schema';
 import type { HouseholdCtx } from '$lib/server/context';
 import { listCellar, homeSections, type CellarFilter, type CellarRow, type Color } from '$lib/server/wines';
 import { listLocations } from '$lib/server/locations';
+import { COLORS } from '$lib/wine-constants';
 import { HOME_SECTION_ORDER, type Phase } from '$lib/phase';
 
 type DB = BaseSQLiteDatabase<'sync', unknown, typeof schema>;
-
-export const COLORS: Color[] = ['red', 'white', 'rose', 'sparkling', 'sweet', 'fortified'];
 
 const totalBottles = (rows: CellarRow[]) => rows.reduce((n, r) => n + r.bottles, 0);
 
