@@ -14,9 +14,21 @@
   import LocaleSwitcher from '$lib/components/LocaleSwitcher.svelte';
   import ThemeToggle from '$lib/components/ThemeToggle.svelte';
   import { formatDate, formatDateTime } from '$lib/format';
+  import { unsubscribeThisDevice } from '$lib/push-client';
 
   let { data, form } = $props();
   const errors = $derived((form?.errors ?? {}) as Record<string, string | undefined>);
+
+  // Drop this browser's push subscription first (best effort, short timeout), then log out.
+  async function logout(e: SubmitEvent) {
+    e.preventDefault();
+    const form = e.currentTarget as HTMLFormElement;
+    await unsubscribeThisDevice({
+      serviceWorker: 'serviceWorker' in navigator ? navigator.serviceWorker : undefined,
+      fetch
+    });
+    form.submit();
+  }
 </script>
 
 <svelte:head><title>{m.account_page_title()}</title></svelte:head>
@@ -141,7 +153,7 @@
     </ul>
   </section>
 
-  <form method="POST" action="/logout">
+  <form method="POST" action="/logout" onsubmit={logout}>
     <Button type="submit" variant="secondary" block>
       <SignOut size={18} aria-hidden="true" />
       {m.account_logout()}
