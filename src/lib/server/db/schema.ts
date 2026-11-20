@@ -4,6 +4,7 @@ import { sql } from 'drizzle-orm';
 export const households = sqliteTable('households', {
   id: integer('id').primaryKey({ autoIncrement: true }),
   name: text('name').notNull(),
+  phaseScanDate: text('phase_scan_date'), // YYYY-MM-DD, jour du dernier scan des phases (null = jamais scanné)
   createdAt: integer('created_at').notNull().default(sql`(unixepoch())`)
 });
 
@@ -194,5 +195,21 @@ export const labelAnalyses = sqliteTable(
   },
   (t) => ({
     householdCreatedIdx: index('label_analyses_household_created').on(t.householdId, t.createdAt)
+  })
+);
+
+/** Phases notifiables déjà vues pour un vin ; `silent` = enregistrée sans notification (action de l'utilisateur, amorçage). */
+export const notificationLog = sqliteTable(
+  'notification_log',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    wineId: integer('wine_id').notNull().references(() => wines.id, { onDelete: 'cascade' }),
+    phase: text('phase').notNull(),
+    detectedAt: integer('detected_at').notNull(),
+    silent: integer('silent').notNull().default(0)
+  },
+  (t) => ({
+    winePhaseUq: uniqueIndex('notification_log_wine_phase').on(t.wineId, t.phase),
+    detectedIdx: index('notification_log_detected_at').on(t.detectedAt)
   })
 );

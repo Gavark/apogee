@@ -7,8 +7,10 @@ import { getOwnedAnalysis } from './label-analyses';
 import { cleanupQuietly, deletePhoto, photosDir } from './photos';
 import type { AiConfidence } from './ai/types';
 import { WINE_FORMATS_CL, type Color } from '../wine-constants';
+import { householdReferenceTimeZone, markCurrentPhaseSilently } from './notifications/phases';
 import {
   HOME_SECTION_ORDER,
+  currentYear,
   computePhase,
   validateWindow,
   type Phase,
@@ -220,6 +222,9 @@ function sameWindow(a: WindowYears, b: WindowYears): boolean {
 const hasYears = (w: WindowYears) =>
   w.drinkFrom !== null || w.peakFrom !== null || w.peakTo !== null || w.drinkUntil !== null;
 
+/** Current calendar year in the household's reference time zone. */
+const wineYear = (db: DB, ctx: HouseholdCtx) => currentYear(householdReferenceTimeZone(db, ctx.householdId));
+
 const NO_AI = { aiConfidence: null, aiRationale: null, aiModel: null, aiAnalyzedAt: null } as const;
 
 export function createWine(
@@ -253,7 +258,9 @@ export function createWine(
       })
       .returning({ id: wines.id })
       .get().id;
-    return { wineId, lotId: upsertLot(tx, wineId, lot) };
+    const lotId = upsertLot(tx, wineId, lot);
+    markCurrentPhaseSilently(tx, wineId, wineYear(tx, ctx));
+    return { wineId, lotId };
   });
 }
 
@@ -291,6 +298,8 @@ export function updateWine(db: DB, ctx: HouseholdCtx, wineId: number, input: Win
       })
       .where(and(eq(wines.id, wineId), eq(wines.householdId, ctx.householdId)))
       .run();
+    // The user's own edit must never be announced by the daily scan.
+    markCurrentPhaseSilently(tx, wineId, wineYear(tx, ctx));
   });
 }
 
@@ -322,6 +331,7 @@ export function applyAiWindow(db: DB, ctx: HouseholdCtx, wineId: number, analysi
       })
       .where(and(eq(wines.id, wineId), eq(wines.householdId, ctx.householdId)))
       .run();
+    markCurrentPhaseSilently(tx, wineId, wineYear(tx, ctx));
   });
 }
 
