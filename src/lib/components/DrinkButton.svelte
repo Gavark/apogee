@@ -4,7 +4,7 @@
   import * as m from '$paraglide/messages';
   import Button from '$lib/components/Button.svelte';
   import Sheet from '$lib/components/Sheet.svelte';
-  import { newOpId, sendStockOps } from '$lib/stock-client';
+  import { newOpId, sendStockOps, SessionExpiredError } from '$lib/stock-client';
   import { showToast } from '$lib/toast.svelte';
   import { wineTitle } from '$lib/wine-labels';
   import type { CellarLot, CellarRow } from '$lib/server/wines';
@@ -34,8 +34,8 @@
     try {
       const [r] = await sendStockOps([{ opId: newOpId(), kind: 'unconsume', consumptionId }]);
       showToast(r.status === 'applied' ? m.wine_toast_undone() : m.wine_err_op());
-    } catch {
-      showToast(m.wine_err_network());
+    } catch (e) {
+      if (!(e instanceof SessionExpiredError)) showToast(m.wine_err_network());
     } finally {
       await invalidateAll();
     }
@@ -58,8 +58,8 @@
       } else if (r.status === 'rejected') {
         showToast(r.reason === 'empty_lot' ? m.drink_empty_lot() : m.wine_err_op());
       }
-    } catch {
-      showToast(m.wine_err_network());
+    } catch (e) {
+      if (!(e instanceof SessionExpiredError)) showToast(m.wine_err_network());
     } finally {
       await invalidateAll();
       onpending?.(-1);

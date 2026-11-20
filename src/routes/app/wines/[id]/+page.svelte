@@ -12,7 +12,7 @@
   import PhaseBadge from '$lib/components/PhaseBadge.svelte';
   import Sheet from '$lib/components/Sheet.svelte';
   import WindowTimeline from '$lib/components/WindowTimeline.svelte';
-  import { newOpId, sendStockOps } from '$lib/stock-client';
+  import { newOpId, sendStockOps, SessionExpiredError } from '$lib/stock-client';
   import { showToast } from '$lib/toast.svelte';
   import { colorLabel, formatLabel, wineTitle } from '$lib/wine-labels';
   import { currentYear } from '$lib/phase';
@@ -65,8 +65,8 @@
         return null;
       }
       return result;
-    } catch {
-      errorMsg = m.wine_err_network();
+    } catch (e) {
+      if (!(e instanceof SessionExpiredError)) errorMsg = m.wine_err_network();
       return null;
     } finally {
       await invalidateAll();

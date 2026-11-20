@@ -1,3 +1,4 @@
+import { goto } from '$app/navigation';
 import type { OpResult, StockOp } from '$lib/server/stock';
 
 /** A fresh idempotency key. randomUUID needs a secure context; plain-http LAN access falls back. */
@@ -10,13 +11,24 @@ export function newOpId(): string {
   return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`;
 }
 
-/** Posts stock operations; resolves with one result per op, rejects on a network or HTTP failure. */
+/** The session is gone (HTTP 401): the user has been sent to /login, callers should stay silent. */
+export class SessionExpiredError extends Error {
+  constructor() {
+    super('session expired');
+  }
+}
+
+/** Posts stock operations; resolves with one result per op, rejects on a network or HTTP failure (SessionExpiredError after redirecting to /login on a 401). */
 export async function sendStockOps(ops: StockOp[]): Promise<OpResult[]> {
   const res = await fetch('/api/stock/ops', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ ops })
   });
+  if (res.status === 401) {
+    await goto('/login');
+    throw new SessionExpiredError();
+  }
   if (!res.ok) throw new Error(`stock ops failed: HTTP ${res.status}`);
   return ((await res.json()) as { results: OpResult[] }).results;
 }
