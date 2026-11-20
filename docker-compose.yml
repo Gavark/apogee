@@ -44,3 +44,31 @@ services:
       interval: 30s
       timeout: 5s
       retries: 3
+
+  # Sauvegarde automatique : une paire base + photos dans ./backups, chaque nuit.
+  # Voir docs/BACKUP.md. Le script vérifie la sauvegarde puis fait tourner la rotation.
+  backup:
+    image: alpine:3
+    container_name: apogee-backup
+    restart: unless-stopped
+    depends_on:
+      apogee:
+        condition: service_healthy
+    volumes:
+      - ./data:/data:ro
+      - ./backups:/backups
+      - ./scripts/run-backup.sh:/usr/local/bin/run-backup:ro
+    environment:
+      - TZ=${TZ:-Europe/Paris}
+      - BACKUP_RETENTION=${BACKUP_RETENTION:-30}
+      - BACKUP_SCHEDULE=${BACKUP_SCHEDULE:-0 3 * * *}
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        apk add --no-cache sqlite tzdata >/dev/null || { echo "[boot] apk add failed"; exit 1; }
+        echo "$${BACKUP_SCHEDULE} BACKUP_RETENTION=$${BACKUP_RETENTION} sh /usr/local/bin/run-backup >> /proc/1/fd/1 2>&1" | crontab -
+        echo "[boot] cron registered: $${BACKUP_SCHEDULE}"
+        echo "[boot] retention: $${BACKUP_RETENTION} backups"
+        echo "[boot] running initial backup..."
+        BACKUP_RETENTION=$${BACKUP_RETENTION} sh /usr/local/bin/run-backup
+        exec crond -f -L /dev/stdout

@@ -38,3 +38,23 @@ it('docker-compose transmet les variables AI_*', () => {
 it('Dockerfile : corps de requête jusqu\'à 8 Mo (photos)', () => {
   expect(dockerfile).toContain('ENV BODY_SIZE_LIMIT=8M');
 });
+
+it('docker-compose : service backup (alpine, ./data en lecture seule, ./backups, script monté, variables BACKUP_*)', () => {
+  const backup = compose.slice(compose.indexOf('\n  backup:'));
+  expect(backup).toContain('image: alpine:3');
+  expect(backup).toContain('container_name: apogee-backup');
+  expect(backup).toContain('restart: unless-stopped');
+  expect(backup).toContain('- ./data:/data:ro');
+  expect(backup).toContain('- ./backups:/backups');
+  expect(backup).toContain('- ./scripts/run-backup.sh:/usr/local/bin/run-backup:ro');
+  expect(backup).toContain('- BACKUP_RETENTION=$' + '{BACKUP_RETENTION:-30}');
+  expect(backup).toContain('- BACKUP_SCHEDULE=$' + '{BACKUP_SCHEDULE:-0 3 * * *}');
+  expect(backup).toMatch(/depends_on:\s*\n\s*apogee:\s*\n\s*condition: service_healthy/);
+  // `$$` keeps compose from interpolating the variables of the startup command
+  expect(backup).toContain('$' + '${BACKUP_SCHEDULE}');
+  expect(backup).toContain('$' + '${BACKUP_RETENTION}');
+  // a failed `apk add` at boot must stop the container so `restart: unless-stopped` retries
+  expect(backup).toContain(
+    'apk add --no-cache sqlite tzdata >/dev/null || { echo "[boot] apk add failed"; exit 1; }'
+  );
+});
