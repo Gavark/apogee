@@ -47,7 +47,11 @@ Détail : `docs/superpowers/plans/2026-11-20-apogee-p2b-sauvegarde.md`
   - [x] Task 4 : réglages, appareils, service worker
   - [x] Vérification finale (revue de branche + corrections relues ; push réel via FCM vérifié dans Chromium)
   - [ ] Essai sur le navigateur de l'utilisateur après déploiement
-- [ ] Plan 4 : réseau intermittent et resynchronisation
+- [ ] Plan 4 : réseau intermittent — `docs/superpowers/plans/2026-11-20-apogee-p4-hors-ligne.md`
+  - [ ] Task 1 : file d'opérations, surcouche optimiste (+ précision max 100)
+  - [ ] Task 2 : envoi via la file, synchronisation
+  - [ ] Task 3 : service worker (lecture hors ligne, Background Sync, cloisonnement par compte)
+  - [ ] Task 4 : écrans réseau requis, docs, vérification hors ligne
 
 ## Revue (plan 1, 2026-11-20)
 - 13 tâches, chacune relue (spec + qualité) ; 6 boucles de correction ; revue finale de branche (opus) puis une vague de 13 corrections relue.
