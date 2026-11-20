@@ -18,11 +18,19 @@ Détail : `docs/superpowers/plans/2026-11-19-apogee-p1-fondations-cave.md`
 - [x] Task 11 : « Quoi ouvrir », Cave et « Bue »
 - [x] Task 12 : Docker et documentation
 - [x] Task 13 : workflows CI/CD écrits
-- [ ] Task 13 step 6 : créer Gavark/apogee, pousser, PR (en attente d'accord)
+- [x] Task 13 step 6 : dépôt Gavark/apogee créé, PR #1 fusionnée, image GHCR publiée
 - [x] Vérification finale (revue de branche + vague de corrections)
 
 ## Plans suivants (à rédiger après le plan 1)
-- [ ] Plan 2 : analyse IA de l'étiquette
+- [ ] Plan 2 : analyse IA de l'étiquette — `docs/superpowers/plans/2026-11-20-apogee-p2-ia-etiquette.md`
+  - [ ] Task 1 : contrat IA, normalisation, prompt
+  - [ ] Task 2 : connecteurs Anthropic / compatible OpenAI, config
+  - [ ] Task 3 : photos, analyses enregistrées, limite quotidienne
+  - [ ] Task 4 : API d'analyse, redimensionnement
+  - [ ] Task 5 : ajout par photo
+  - [ ] Task 6 : fiche — photo, provenance, ré-estimation
+  - [ ] Task 7 : admin IA, docs
+  - [ ] Vérification finale + essai réel (avec accord)
 - [ ] Plan 3 : notifications (phases + rappel mensuel)
 - [ ] Plan 4 : réseau intermittent et resynchronisation
 
