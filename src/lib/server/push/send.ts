@@ -1,4 +1,4 @@
-import webpush from 'web-push';
+import { sendNotification } from 'web-push';
 import { eq } from 'drizzle-orm';
 import type { BaseSQLiteDatabase } from 'drizzle-orm/sqlite-core';
 import * as schema from '../db/schema';
@@ -22,7 +22,7 @@ const PUSH_TIMEOUT_MS = 15_000;
 
 /** Real sender; a rejected promise (WebPushError) carries `statusCode`. */
 export const webPushSender: PushSender = async (sub, payload, vapid) => {
-  const res = await webpush.sendNotification(
+  const res = await sendNotification(
     { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
     JSON.stringify(payload),
     { vapidDetails: vapid, TTL: 86400, timeout: PUSH_TIMEOUT_MS }

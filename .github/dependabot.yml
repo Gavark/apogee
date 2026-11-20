@@ -13,6 +13,17 @@ updates:
     groups:
       npm-minor-patch:
         update-types: [minor, patch]
+    ignore:
+      # @types/node suit la version majeure de Node exécutée (Dockerfile, CI) :
+      # on le monte à la main en même temps que l'image node. Le test
+      # tests/server/workflows.test.ts vérifie que les trois restent alignés.
+      - dependency-name: '@types/node'
+        update-types: [version-update:semver-major]
+      # TypeScript 7 (portage natif en Go) : @sveltejs/kit 3.4 déclare
+      # typescript ^6 en peer et svelte-check ^5 || ^6 (npm ci échoue, PR #9).
+      # À lever quand SvelteKit et svelte-check accepteront TypeScript 7.
+      - dependency-name: typescript
+        update-types: [version-update:semver-major]
     commit-message:
       prefix: chore(deps)
 
@@ -28,6 +39,10 @@ updates:
     commit-message:
       prefix: chore(ci)
 
+  # Image node : seules les versions paires deviennent LTS. Une PR vers une
+  # majeure impaire (27, 29…) est à fermer avec « @dependabot ignore this major
+  # version ». Une majeure paire se fait à la main avec node-version (ci.yml,
+  # docker-publish.yml) et @types/node : sinon le test d'alignement échoue.
   - package-ecosystem: docker
     directory: /
     schedule:

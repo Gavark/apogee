@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1.7
 
-FROM node:22-alpine AS deps
+FROM node:26-alpine AS deps
 WORKDIR /app
 COPY package.json package-lock.json ./
 # --ignore-scripts: better-sqlite3 ships prebuilt binaries (linuxmusl included)
@@ -8,14 +8,14 @@ COPY package.json package-lock.json ./
 # Alpine has no Python, so that fails. No dependency needs an install script.
 RUN npm ci --ignore-scripts
 
-FROM node:22-alpine AS build
+FROM node:26-alpine AS build
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 # Create /data so SvelteKit post-build analysis can open the DB during analyse phase
 RUN mkdir -p /data && DATABASE_PATH=/data/build-probe.sqlite npm run build && rm -f /data/build-probe.sqlite
 
-FROM node:22-alpine AS runtime
+FROM node:26-alpine AS runtime
 WORKDIR /app
 # production: secure cookies, and /dev/styleguide answers 404
 ENV NODE_ENV=production
