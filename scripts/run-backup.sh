@@ -26,6 +26,15 @@ fail() {
   exit 1
 }
 
+# A bad retention value (empty, non-numeric, zero) must never turn the rotation
+# into "delete everything": fall back to the default.
+case "$RETENTION" in
+  "" | *[!0-9]* | 0*)
+    log "invalid BACKUP_RETENTION '${RETENTION}', using 30"
+    RETENTION=30
+    ;;
+esac
+
 mkdir -p "$BACKUP_DIR"
 
 # Skip gracefully if the source DB does not exist yet (first boot)
@@ -62,11 +71,11 @@ fi
 # Retention: keep the newest N of each family. Only reached once the whole run
 # succeeded, so a failed run never prunes a good backup to make room for a bad one.
 # shellcheck disable=SC2086 # the globs must stay unquoted to expand
-ls -1t ${BACKUP_DIR}/$DB_GLOB 2>/dev/null \
+ls -1t "${BACKUP_DIR}"/$DB_GLOB 2>/dev/null \
   | tail -n +$((RETENTION + 1)) \
   | xargs -r rm -f
 # shellcheck disable=SC2086
-ls -1t ${BACKUP_DIR}/$PHOTOS_GLOB 2>/dev/null \
+ls -1t "${BACKUP_DIR}"/$PHOTOS_GLOB 2>/dev/null \
   | tail -n +$((RETENTION + 1)) \
   | xargs -r rm -f
 

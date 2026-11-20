@@ -14,9 +14,9 @@ set -u
 apk add --no-cache sqlite >/dev/null
 
 mkdb() { sqlite3 "$1" "CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT); INSERT INTO users (name) VALUES ('a');"; }
-run() { # run <scenario> <retention>
-  s="/work/$1"; r="$2"
-  DATA_DIR="$s/data" BACKUP_DIR="$s/backups" BACKUP_RETENTION="$r" /scripts/run-backup.sh >"$s/out.txt" 2>&1
+run() { # run <scenario> <retention> [dir put first in PATH]
+  s="/work/$1"; r="$2"; pre="$PATH"; [ $# -ge 3 ] && pre="$3:$PATH"
+  PATH="$pre" DATA_DIR="$s/data" BACKUP_DIR="$s/backups" BACKUP_RETENTION="$r" sh /scripts/run-backup.sh >"$s/out.txt" 2>&1
   echo $? >"$s/exit.txt"
 }
 setup() { mkdir -p "/work/$1/data" "/work/$1/backups"; }
@@ -39,11 +39,12 @@ run nophotos 30
 setup nodb
 run nodb 30
 
-# 4. corrupt database, older backups already there
+# 4. corrupt database, two older backups, retention 1: a failed run must not prune
 setup corrupt; head -c 4096 /dev/urandom >/work/corrupt/data/apogee.sqlite
 mkdir /work/corrupt/data/photos
 mkdb /work/corrupt/backups/apogee-20200101T000000Z.sqlite
-run corrupt 30
+mkdb /work/corrupt/backups/apogee-20200102T000000Z.sqlite
+run corrupt 1
 
 # 5. rotation: 4 pairs + hand-named copies, retention 2
 setup rotation; mkdb /work/rotation/data/apogee.sqlite
@@ -55,6 +56,37 @@ for i in 1 2 3 4; do
 done
 touch -d "2019-01-01 00:00:00" "$b/apogee-avant-maj.sqlite" "$b/apogee-photos-avant-maj.tar.gz"
 run rotation 2
+
+# 6/7. valid database, photos archive fails (tar stub: fails on create / fails only
+# on the read-back), two old pairs, retention 1: DB snapshot kept, no archive left,
+# old pairs untouched.
+mkdir -p /work/stub-create /work/stub-list
+printf '#!/bin/sh
+exit 1
+' >/work/stub-create/tar
+printf '#!/bin/sh
+case "$*" in *-czf*) exec /bin/tar "$@";; *) exit 1;; esac
+' >/work/stub-list/tar
+chmod +x /work/stub-create/tar /work/stub-list/tar
+for sc in photofail-create photofail-list; do
+  setup $sc; mkdb /work/$sc/data/apogee.sqlite
+  mkdir /work/$sc/data/photos; echo img >/work/$sc/data/photos/a.jpg
+  for i in 1 2; do
+    mkdb /work/$sc/backups/apogee-2020010"$i"T000000Z.sqlite
+    touch /work/$sc/backups/apogee-photos-2020010"$i"T000000Z.tar.gz
+  done
+done
+run photofail-create 1 /work/stub-create
+run photofail-list 1 /work/stub-list
+
+# 8. invalid retention values fall back to 30: nothing is pruned
+for v in "" abc 0; do
+  sc="badret-$v"; [ -z "$v" ] && sc=badret-empty; setup $sc; mkdb /work/$sc/data/apogee.sqlite
+  for i in 1 2 3; do mkdb /work/$sc/backups/apogee-2020010"$i"T000000Z.sqlite; done
+  run $sc "$v"
+done
+
+chmod -R a+rwX /work
 `;
 
 let tmp: string;
@@ -118,9 +150,42 @@ describe('scripts/run-backup.sh', () => {
     'base corrompue : aucun fichier .sqlite laissé, sortie non nulle, anciennes sauvegardes intactes',
     () => {
       expect(exitCode('corrupt')).not.toBe(0);
-      expect(backups('corrupt')).toEqual(['apogee-20200101T000000Z.sqlite']);
+      expect(backups('corrupt')).toEqual([
+        'apogee-20200101T000000Z.sqlite',
+        'apogee-20200102T000000Z.sqlite'
+      ]);
     }
   );
+
+  for (const sc of ['photofail-create', 'photofail-list']) {
+    it.skipIf(!dockerAvailable)(
+      `archive des photos en échec (${sc}) : sortie non nulle, snapshot de la base gardé, aucune archive ajoutée, anciennes paires intactes`,
+      () => {
+        expect(exitCode(sc)).not.toBe(0);
+        const files = backups(sc);
+        const dbs = files.filter((f) => f.endsWith('.sqlite'));
+        const tars = files.filter((f) => f.endsWith('.tar.gz'));
+        expect(dbs).toHaveLength(3);
+        expect(dbs).toContain('apogee-20200101T000000Z.sqlite');
+        expect(dbs).toContain('apogee-20200102T000000Z.sqlite');
+        expect(tars).toEqual([
+          'apogee-photos-20200101T000000Z.tar.gz',
+          'apogee-photos-20200102T000000Z.tar.gz'
+        ]);
+      }
+    );
+  }
+
+  for (const sc of ['badret-empty', 'badret-abc', 'badret-0']) {
+    it.skipIf(!dockerAvailable)(
+      `BACKUP_RETENTION invalide (${sc}) : retour à 30, rien n'est supprimé`,
+      () => {
+        expect(exitCode(sc)).toBe(0);
+        expect(backups(sc)).toHaveLength(4);
+        if (sc !== 'badret-empty') expect(read(sc, 'out.txt')).toContain('invalid BACKUP_RETENTION');
+      }
+    );
+  }
 
   it.skipIf(!dockerAvailable)(
     'rotation : avec BACKUP_RETENTION=2 et 4 paires existantes, il reste les 2 plus récentes de chaque type ; apogee-avant-maj.sqlite est conservé',
