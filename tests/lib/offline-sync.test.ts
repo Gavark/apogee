@@ -96,6 +96,25 @@ describe('syncNow', () => {
     expect(q[0].attempts).toBe(0);
   });
 
+  it('envoie l’utilisateur attendu dans x-apogee-user', async () => {
+    await enqueue(7, adj('a'));
+    const s = server(allApplied);
+    await syncNow(7, { fetch: s.fetch });
+    const init = s.calls.mock.calls[0][1] as RequestInit;
+    expect(new Headers(init.headers).get('x-apogee-user')).toBe('7');
+  });
+
+  it('utilisateur différent de la session (409) → unauthorized, file conservée, aucune tentative comptée', async () => {
+    await enqueue(1, adj('a'));
+    await enqueue(1, consume('b'));
+    const s = server(() => new Response(JSON.stringify({ error: 'user_mismatch' }), { status: 409 }));
+    const out = await syncNow(1, { fetch: s.fetch });
+    expect(out).toMatchObject({ status: 'unauthorized', sent: 0, results: [], dropped: [] });
+    const q = await listQueued(1);
+    expect(q.map((x) => x.op.opId)).toEqual(['a', 'b']);
+    expect(q.map((x) => x.attempts)).toEqual([0, 0]);
+  });
+
   it('500 → retry et attempts incrémenté', async () => {
     await enqueue(1, adj('a'));
     const s = server(() => new Response('{}', { status: 500 }));

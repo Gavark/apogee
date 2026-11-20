@@ -110,13 +110,14 @@ describe('utilisateur actif (pour le service worker)', () => {
     expect(await getActiveUser()).toBeNull();
   });
 
-  it('ne touche pas à la file', async () => {
+  it('file et utilisateur actif indépendants : effacer l’un ne touche pas l’autre', async () => {
     await enqueue(1, adj('a'));
     await setActiveUser(1);
     await clearQueue();
     expect(await getActiveUser()).toBe(1);
+    await enqueue(1, adj('b'));
     await setActiveUser(null);
-    expect(await countQueued(1)).toBe(0);
+    expect((await listQueued(1)).map((q) => q.op.opId)).toEqual(['b']);
   });
 
   it('la mise à niveau depuis la version 1 de la base garde les gestes en file', async () => {

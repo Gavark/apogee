@@ -3,15 +3,15 @@ import { clearPageCache } from './page-cache';
 import { getActiveUser, setActiveUser } from './queue';
 
 /**
- * Called on every authenticated load. Another account was active here (no logout, e.g. an expired
- * session): its cached pages are dropped first, so they are never shown to this user offline.
- * The previous user's queued gestures stay in IndexedDB, tied to their id, and are never sent
- * under this account.
+ * Called on every authenticated load. Whenever this user was not the active one (another account,
+ * or nobody: a tab of the previous user left open after its logout may have cached pages since),
+ * the cached pages are dropped first, so another account's are never shown to this user offline.
+ * The previous user's queued gestures stay in IndexedDB, tied to their id; the server refuses them
+ * under this account (x-apogee-user).
  */
 export async function becomeActiveUser(userId: number): Promise<void> {
-  const previous = await getActiveUser();
-  if (previous === userId) return;
-  if (previous !== null) await clearPageCache();
+  if ((await getActiveUser()) === userId) return;
+  await clearPageCache();
   await setActiveUser(userId);
 }
 

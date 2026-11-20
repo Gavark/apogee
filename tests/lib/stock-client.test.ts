@@ -66,6 +66,13 @@ describe('sendStockOps sans utilisateur connu (envoi direct)', () => {
     expect(goto).toHaveBeenCalledWith('/login');
   });
 
+  it('sans utilisateur connu : pas d’en-tête x-apogee-user', async () => {
+    const f = vi.fn(async (_u: string | URL | Request, _init?: RequestInit) => new Response(JSON.stringify({ results: [] })));
+    vi.stubGlobal('fetch', f);
+    await sendStockOps([op]);
+    expect(new Headers(f.mock.calls[0][1]?.headers).has('x-apogee-user')).toBe(false);
+  });
+
   it('sur une autre erreur HTTP : échec simple, pas de redirection', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response('{}', { status: 500 })));
     const err = await sendStockOps([op]).catch((e) => e);
@@ -110,6 +117,21 @@ describe('sendStockOps via la file', () => {
     await sendStockOps([consume('a')]);
     expect(await listQueued(1)).toHaveLength(1);
     expect(pendingOps()).toHaveLength(1);
+  });
+
+  it('envoie l’utilisateur attendu dans x-apogee-user', async () => {
+    const { fetch } = serve();
+    await sendStockOps([op]);
+    expect(new Headers((fetch.mock.calls[0][1] as RequestInit).headers).get('x-apogee-user')).toBe('1');
+  });
+
+  it('autre compte dans la session (409) → /login et SessionExpiredError, l’opération reste en file', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ error: 'user_mismatch' }), { status: 409 })));
+    await expect(sendStockOps([op])).rejects.toBeInstanceOf(SessionExpiredError);
+    expect(goto).toHaveBeenCalledWith('/login');
+    const q = await listQueued(1);
+    expect(q.map((x) => x.op.opId)).toEqual([op.opId]);
+    expect(q[0].attempts).toBe(0);
   });
 
   it('401 → /login et SessionExpiredError, l’opération reste en file', async () => {
@@ -198,6 +220,18 @@ describe('undoStockOp', () => {
     expect(s.batches[0][0].opId).toBe('a');
     expect(s.batches[1][0]).toMatchObject({ kind: 'unconsume', consumptionId: 77 });
     expect(await listQueued(1)).toEqual([]);
+    // The replay and the inverse both name the expected user.
+    for (const [, init] of s.fetch.mock.calls) expect(new Headers((init as RequestInit).headers).get('x-apogee-user')).toBe('1');
+  });
+
+  it('rejeu sous un autre compte (409) → /login et SessionExpiredError, le geste reste en file', async () => {
+    const g = consume('a');
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('{}', { status: 500 })));
+    await sendStockOps([g]);
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ error: 'user_mismatch' }), { status: 409 })));
+    await expect(undoStockOp(g)).rejects.toBeInstanceOf(SessionExpiredError);
+    expect(goto).toHaveBeenCalledWith('/login');
+    expect((await listQueued(1)).map((x) => x.op.opId)).toEqual(['a']);
   });
 
   it('après une réponse perdue (délai dépassé) → rejoue le geste puis envoie l’inverse', async () => {

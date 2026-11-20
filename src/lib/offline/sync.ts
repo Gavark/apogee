@@ -65,20 +65,33 @@ const timeoutSignal = (): AbortSignal | undefined =>
 export type PostOutcome =
   | { kind: 'ok'; results: OpResult[] }
   | { kind: 'invalid' } // 400: the server will never accept these ops
-  | { kind: 'unauthorized' }
+  | { kind: 'unauthorized' } // 401, or 409: the session belongs to another account than the ops
   | { kind: 'failed' }; // 5xx, network failure, timeout or unreadable body: maybe applied, replay later
 
-/** One POST of `ops` to the stock endpoint. Ops are idempotent by opId: replaying one returns its stored result. */
-export async function postOps(ops: StockOp[], doFetch: typeof fetch = fetch): Promise<PostOutcome> {
+/** Header naming the account the ops belong to; the server answers 409 when the session is another one. */
+export const USER_HEADER = 'x-apogee-user';
+
+/** Request headers for a POST of `userId`'s ops (no user header when unknown). */
+export function opsHeaders(userId?: number): Record<string, string> {
+  const h: Record<string, string> = { 'content-type': 'application/json' };
+  if (userId !== undefined) h[USER_HEADER] = String(userId);
+  return h;
+}
+
+/**
+ * One POST of `userId`'s `ops` to the stock endpoint. Ops are idempotent by opId: replaying one
+ * returns its stored result. 401 and 409 (session of another account) are both `unauthorized`.
+ */
+export async function postOps(ops: StockOp[], userId: number, doFetch: typeof fetch = fetch): Promise<PostOutcome> {
   try {
     const res = await doFetch('/api/stock/ops', {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers: opsHeaders(userId),
       body: JSON.stringify({ ops }),
       credentials: 'same-origin',
       signal: timeoutSignal()
     });
-    if (res.status === 401) return { kind: 'unauthorized' };
+    if (res.status === 401 || res.status === 409) return { kind: 'unauthorized' };
     if (res.status === 400) return { kind: 'invalid' };
     if (res.ok) {
       const body = (await res.json()) as { results?: unknown };
@@ -99,9 +112,9 @@ async function run(userId: number, doFetch: typeof fetch): Promise<SyncOutcome> 
   for (let i = 0; i < queued.length; i += SYNC_BATCH_SIZE) {
     const ops = queued.slice(i, i + SYNC_BATCH_SIZE).map((q) => q.op);
     const ids = ops.map((o) => o.opId);
-    const res = await postOps(ops, doFetch);
+    const res = await postOps(ops, userId, doFetch);
     if (res.kind === 'unauthorized') {
-      out.status = 'unauthorized'; // nothing removed: sent again once logged back in
+      out.status = 'unauthorized'; // nothing removed, no attempt counted: sent again once logged back in as this user
       break;
     }
     if (res.kind === 'invalid') {

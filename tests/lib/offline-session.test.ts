@@ -22,10 +22,10 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals());
 
 describe('cloisonnement par utilisateur', () => {
-  it('premier utilisateur : enregistré, cache conservé', async () => {
+  it('aucun utilisateur actif connu : pages en cache supprimées (un onglet resté ouvert a pu les remplir), puis enregistré', async () => {
     await becomeActiveUser(1);
+    expect(deleted).toEqual([PAGE_CACHE]);
     expect(await getActiveUser()).toBe(1);
-    expect(deleted).toEqual([]);
   });
 
   it('même utilisateur : rien ne change', async () => {
@@ -41,13 +41,13 @@ describe('cloisonnement par utilisateur', () => {
     expect(await getActiveUser()).toBe(2);
   });
 
-  it('après une déconnexion : pas de second effacement', async () => {
+  it('déconnexion puis autre compte : effacé à la déconnexion et de nouveau à la connexion suivante', async () => {
     await setActiveUser(1);
     await leaveActiveUser();
     expect(deleted).toEqual([PAGE_CACHE]);
     expect(await getActiveUser()).toBeNull();
     await becomeActiveUser(2);
-    expect(deleted).toEqual([PAGE_CACHE]);
+    expect(deleted).toEqual([PAGE_CACHE, PAGE_CACHE]);
     expect(await getActiveUser()).toBe(2);
   });
 

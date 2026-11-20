@@ -3,7 +3,7 @@ import { page } from '$app/state';
 import * as m from '$paraglide/messages';
 import { newOpId } from '$lib/offline/op-id';
 import { enqueue, listQueued, removeQueued } from '$lib/offline/queue';
-import { postOps, syncIdle, syncNow, withSyncLock } from '$lib/offline/sync';
+import { opsHeaders, postOps, syncIdle, syncNow, withSyncLock } from '$lib/offline/sync';
 import {
   applyResults,
   claimOps,
@@ -26,21 +26,27 @@ export type ClientOpResult = OpResult | { opId: string; status: 'queued' };
 
 export { newOpId };
 
-/** The session is gone (HTTP 401): the user has been sent to /login, callers should stay silent. */
+/**
+ * The session is gone (HTTP 401) or belongs to another account (409): the user has been sent to
+ * /login, callers should stay silent.
+ */
 export class SessionExpiredError extends Error {
   constructor() {
     super('session expired');
   }
 }
 
-/** Posts the ops straight away; rejects on a network or HTTP failure (SessionExpiredError after redirecting on a 401). */
-async function sendDirect(ops: StockOp[]): Promise<OpResult[]> {
+/**
+ * Posts the ops straight away, on behalf of `userId` when known; rejects on a network or HTTP
+ * failure (SessionExpiredError after redirecting on a 401 or a 409).
+ */
+async function sendDirect(ops: StockOp[], userId?: number): Promise<OpResult[]> {
   const res = await fetch('/api/stock/ops', {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: opsHeaders(userId),
     body: JSON.stringify({ ops })
   });
-  if (res.status === 401) {
+  if (res.status === 401 || res.status === 409) {
     await goto('/login');
     throw new SessionExpiredError();
   }
@@ -58,7 +64,8 @@ const currentUserId = (): number | undefined => {
 /**
  * Stores the ops in the offline queue, then tries to sync: resolves with each op's server result,
  * or `queued` when it could not be sent yet (no network, server error). Never rejects for a network
- * failure; on a 401 redirects to /login and rejects with SessionExpiredError, the ops staying queued.
+ * failure; on a 401 (or a 409: another account's session) redirects to /login and rejects with
+ * SessionExpiredError, the ops staying queued.
  * Without a logged-in user (no queue owner), sends directly as before.
  */
 export async function sendStockOps(ops: StockOp[]): Promise<ClientOpResult[]> {
@@ -75,7 +82,7 @@ export async function sendStockOps(ops: StockOp[]): Promise<ClientOpResult[]> {
     } catch {
       // No usable IndexedDB (storage blocked, private mode): no offline mode, send directly.
       forgetOps(ops.map((o) => o.opId));
-      return await sendDirect(ops);
+      return await sendDirect(ops, userId);
     }
     let out = await syncNow(userId);
     if (out.status === 'busy') {
@@ -117,7 +124,7 @@ export async function undoStockOp(op: StockOp): Promise<ClientOpResult | 'unqueu
         await removeQueued([op.opId]);
         return 'unqueued' as const;
       }
-      const res = await postOps([op]);
+      const res = await postOps([op], userId);
       if (res.kind === 'invalid') {
         await removeQueued([op.opId]); // never accepted, so never applied
         return 'unqueued' as const;

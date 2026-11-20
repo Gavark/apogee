@@ -9,7 +9,7 @@
   let { children } = $props();
 
   const userId = $derived(page.data.user?.id);
-  // Tells the service worker whose queue to sync; another account's cached pages are dropped first.
+  // Tells the service worker whose queue to sync; on any change of user the cached pages are dropped first.
   $effect(() => {
     if (typeof userId === 'number') void becomeActiveUser(userId).catch(() => {});
   });
