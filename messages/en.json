@@ -339,7 +339,6 @@
   "wine_err_op": "The operation failed. Please try again.",
   "wine_err_empty_lot": "This lot is empty.",
   "wine_err_network": "Cannot connect. Please try again.",
-  "wine_toast_drunk": "Bottle marked as drunk.",
   "wine_toast_removed": "Bottle removed.",
   "wine_toast_undo": "Undo",
   "wine_toast_undone": "Undone.",
@@ -361,5 +360,40 @@
   "wine_edit_title": "Edit wine",
   "wine_edit_page_title": "Edit a wine",
   "wine_save": "Save",
-  "wine_move_same_hint": "Choose another location or spot: the bottle is already there."
+  "wine_move_same_hint": "Choose another location or spot: the bottle is already there.",
+  "home_title": "What to open",
+  "home_total": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} bottle in the cellar",
+        "countPlural=*": "{count} bottles in the cellar"
+      }
+    }
+  ],
+  "home_until": "until {year}",
+  "home_opens": "from {year}",
+  "home_set_window": "Set the window",
+  "home_empty_title": "Your cellar is empty",
+  "home_empty_desc": "Add a first wine: Apogée will tell you when to open it.",
+  "home_empty_action": "Add a wine",
+  "cave_title": "Cellar",
+  "cave_search": "Search wines",
+  "cave_filter_location": "Location",
+  "cave_filter_color": "Colour",
+  "cave_filter_phase": "Phase",
+  "cave_filter_all": "All",
+  "cave_filter_finished": "Drunk",
+  "cave_empty_title": "No wine matches",
+  "cave_empty_desc": "Try other filters.",
+  "cave_empty_finished": "No bottle drunk yet.",
+  "cave_reset": "Reset",
+  "drink_toast": "Drunk · {wine}",
+  "drink_empty_lot": "No bottle left at this spot"
 }

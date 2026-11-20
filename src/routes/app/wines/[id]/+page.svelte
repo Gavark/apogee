@@ -1,12 +1,12 @@
 <script lang="ts">
   import { enhance } from '$app/forms';
   import { invalidateAll } from '$app/navigation';
-  import Wine from 'phosphor-svelte/lib/Wine';
   import PencilSimple from 'phosphor-svelte/lib/PencilSimple';
   import Trash from 'phosphor-svelte/lib/Trash';
   import * as m from '$paraglide/messages';
   import Button from '$lib/components/Button.svelte';
   import Card from '$lib/components/Card.svelte';
+  import DrinkButton from '$lib/components/DrinkButton.svelte';
   import Field from '$lib/components/Field.svelte';
   import LotList from '$lib/components/LotList.svelte';
   import PhaseBadge from '$lib/components/PhaseBadge.svelte';
@@ -14,7 +14,7 @@
   import WindowTimeline from '$lib/components/WindowTimeline.svelte';
   import { newOpId, sendStockOps } from '$lib/stock-client';
   import { showToast } from '$lib/toast.svelte';
-  import { colorLabel, formatLabel } from '$lib/wine-labels';
+  import { colorLabel, formatLabel, wineTitle } from '$lib/wine-labels';
   import { currentYear } from '$lib/phase';
   import type { CellarLot } from '$lib/server/wines';
   import type { OpResult, StockOp } from '$lib/server/stock';
@@ -32,10 +32,9 @@
   let moveTo = $state('');
   let moveQty = $state('1');
   let movePosition = $state('');
-  let pickingLot = $state(false);
   let confirmingDelete = $state(false);
 
-  const title = $derived([wine.producer, wine.cuvee].filter(Boolean).join(' - ') || m.wine_unnamed());
+  const title = $derived(wineTitle(wine));
   const subtitle = $derived(
     [
       wine.appellation,
@@ -117,25 +116,6 @@
     moving = null;
     if (r && r.appliedQuantity) showToast(m.wine_toast_moved({ count: r.appliedQuantity }));
   }
-
-  async function drink(lot: CellarLot) {
-    pickingLot = false;
-    // Local calendar date, not UTC: a bottle opened at 00:30 belongs to today.
-    const now = new Date();
-    const consumedOn = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-    const r = await run({ opId: newOpId(), kind: 'consume', lotId: lot.lotId, consumedOn });
-    if (r?.status === 'applied' && r.consumptionId) {
-      const consumptionId = r.consumptionId;
-      showToast(m.wine_toast_drunk(), {
-        label: m.wine_toast_undo(),
-        run: async () => {
-          if (await run({ opId: newOpId(), kind: 'unconsume', consumptionId })) showToast(m.wine_toast_undone());
-        }
-      });
-    }
-  }
-
-  const onDrinkClick = () => (lots.length === 1 ? drink(lots[0]) : (pickingLot = true));
 </script>
 
 <svelte:head><title>{title}</title></svelte:head>
@@ -173,7 +153,7 @@
     {:else}
       <LotList {lots} {busy} onadjust={adjust} onmove={openMove} />
       <div class="drink">
-        <Button block disabled={busy} onclick={onDrinkClick}><Wine size={20} aria-hidden="true" />{m.wine_drink()}</Button>
+        <DrinkButton row={detail} block />
       </div>
     {/if}
     {#if errorMsg}<p class="error" role="alert">{errorMsg}</p>{/if}
@@ -231,18 +211,6 @@
   </form>
 </Sheet>
 
-<Sheet open={pickingLot} onclose={() => (pickingLot = false)} title={m.wine_drink_which()}>
-  <ul class="pick">
-    {#each lots as lot (lot.lotId)}
-      <li>
-        <Button variant="secondary" block onclick={() => drink(lot)}>
-          {lot.locationName}{lot.position ? ` · ${lot.position}` : ''} ({lot.quantity})
-        </Button>
-      </li>
-    {/each}
-  </ul>
-</Sheet>
-
 <Sheet open={confirmingDelete} onclose={() => (confirmingDelete = false)} title={m.wine_delete_title()}>
   <p>{m.wine_delete_body()}</p>
   <form method="POST" action="?/delete" use:enhance class="sheet-form">
@@ -268,5 +236,4 @@
   .note { font-size: var(--fs-sm); }
   .actions { display: flex; gap: var(--s-2); justify-content: space-between; }
   .sheet-form { display: grid; gap: var(--s-3); }
-  .pick { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--s-2); }
 </style>

@@ -46,3 +46,7 @@ export function wineErrorMessage(e: WineInputError): string {
       return m.form_err_year_invalid();
   }
 }
+
+/** Display name of a wine: "Producer - Cuvée", or a placeholder when both are empty. */
+export const wineTitle = (w: { producer: string | null; cuvee: string | null }): string =>
+  [w.producer, w.cuvee].filter(Boolean).join(' - ') || m.wine_unnamed();

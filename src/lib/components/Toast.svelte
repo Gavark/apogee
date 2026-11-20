@@ -1,7 +1,7 @@
 <script lang="ts">
   import X from 'phosphor-svelte/lib/X';
   import * as m from '$paraglide/messages';
-  import { toast, dismissToast } from '$lib/toast.svelte';
+  import { toast, dismissToast, pauseToast, resumeToast } from '$lib/toast.svelte';
 
   function runAction() {
     const action = toast.current?.action;
@@ -15,7 +15,14 @@
 <div class="toast-region" role="status" aria-live="polite" aria-label={m.toast_region()}>
   {#if toast.current}
     {#key toast.current.id}
-      <div class="toast">
+      <div
+        class="toast"
+        role="presentation"
+        onpointerenter={pauseToast}
+        onpointerleave={resumeToast}
+        onfocusin={pauseToast}
+        onfocusout={resumeToast}
+      >
         <p class="message">{toast.current.message}</p>
         {#if toast.current.action}
           <button type="button" class="action" onclick={runAction}>

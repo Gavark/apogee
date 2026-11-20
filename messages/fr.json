@@ -339,7 +339,6 @@
   "wine_err_op": "L'opération a échoué. Réessayez.",
   "wine_err_empty_lot": "Ce lot est vide.",
   "wine_err_network": "Connexion impossible. Réessayez.",
-  "wine_toast_drunk": "Bouteille bue.",
   "wine_toast_removed": "Bouteille retirée.",
   "wine_toast_undo": "Annuler",
   "wine_toast_undone": "Annulé.",
@@ -361,5 +360,40 @@
   "wine_edit_title": "Modifier le vin",
   "wine_edit_page_title": "Modifier un vin",
   "wine_save": "Enregistrer",
-  "wine_move_same_hint": "Choisissez un autre lieu ou une autre précision : la bouteille est déjà là."
+  "wine_move_same_hint": "Choisissez un autre lieu ou une autre précision : la bouteille est déjà là.",
+  "home_title": "Quoi ouvrir",
+  "home_total": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} bouteille en cave",
+        "countPlural=*": "{count} bouteilles en cave"
+      }
+    }
+  ],
+  "home_until": "jusqu'à {year}",
+  "home_opens": "à partir de {year}",
+  "home_set_window": "Saisir la fenêtre",
+  "home_empty_title": "Votre cave est vide",
+  "home_empty_desc": "Ajoutez un premier vin : Apogée vous dira quand l'ouvrir.",
+  "home_empty_action": "Ajouter un vin",
+  "cave_title": "Cave",
+  "cave_search": "Rechercher un vin",
+  "cave_filter_location": "Lieu",
+  "cave_filter_color": "Couleur",
+  "cave_filter_phase": "Phase",
+  "cave_filter_all": "Tous",
+  "cave_filter_finished": "Bus",
+  "cave_empty_title": "Aucun vin ne correspond",
+  "cave_empty_desc": "Essayez d'autres filtres.",
+  "cave_empty_finished": "Aucune bouteille bue pour l'instant.",
+  "cave_reset": "Réinitialiser",
+  "drink_toast": "Bue · {wine}",
+  "drink_empty_lot": "Plus de bouteille à cet endroit"
 }

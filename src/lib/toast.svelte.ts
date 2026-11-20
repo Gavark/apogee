@@ -10,9 +10,13 @@ export const toast = $state<{ current: ToastItem | null }>({ current: null });
 
 let seq = 0;
 let timer: ReturnType<typeof setTimeout> | undefined;
+let duration = 5000;
+let paused = false;
 
 export function showToast(message: string, action?: ToastAction, ms = 5000): void {
   clearTimeout(timer);
+  duration = ms;
+  paused = false;
   toast.current = { id: ++seq, message, action };
   timer = setTimeout(dismissToast, ms);
 }
@@ -20,5 +24,21 @@ export function showToast(message: string, action?: ToastAction, ms = 5000): voi
 export function dismissToast(): void {
   clearTimeout(timer);
   timer = undefined;
+  paused = false;
   toast.current = null;
+}
+
+/** Hover / focus: keep the toast (and its "Annuler") until the pointer or focus leaves. */
+export function pauseToast(): void {
+  if (!toast.current) return;
+  clearTimeout(timer);
+  timer = undefined;
+  paused = true;
+}
+
+/** Pointer / focus left: restart a full countdown. No-op unless paused. */
+export function resumeToast(): void {
+  if (!toast.current || !paused) return;
+  paused = false;
+  timer = setTimeout(dismissToast, duration);
 }

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { toast, showToast, dismissToast } from '../../src/lib/toast.svelte';
+import { toast, showToast, dismissToast, pauseToast, resumeToast } from '../../src/lib/toast.svelte';
 
 describe('toast', () => {
   beforeEach(() => {
@@ -49,5 +49,44 @@ describe('toast', () => {
     showToast('Suivant', undefined, 3000);
     vi.advanceTimersByTime(2999);
     expect(toast.current?.message).toBe('Suivant');
+  });
+
+  it('pause freezes the countdown and resume restarts a full duration', () => {
+    showToast('Bue', { label: 'Annuler', run: () => {} });
+    vi.advanceTimersByTime(4000);
+    pauseToast();
+    vi.advanceTimersByTime(60_000);
+    expect(toast.current?.message).toBe('Bue');
+    resumeToast();
+    vi.advanceTimersByTime(4999);
+    expect(toast.current).not.toBeNull();
+    vi.advanceTimersByTime(1);
+    expect(toast.current).toBeNull();
+  });
+
+  it('resume keeps the duration the toast was shown with', () => {
+    showToast('Court', undefined, 1000);
+    pauseToast();
+    resumeToast();
+    vi.advanceTimersByTime(1000);
+    expect(toast.current).toBeNull();
+  });
+
+  it('resume without a toast, or without a prior pause, does nothing', () => {
+    resumeToast();
+    expect(toast.current).toBeNull();
+    showToast('Plein', undefined, 2000);
+    vi.advanceTimersByTime(1500);
+    resumeToast(); // not paused: must not extend the countdown
+    vi.advanceTimersByTime(500);
+    expect(toast.current).toBeNull();
+  });
+
+  it('a new toast while paused starts running again', () => {
+    showToast('A');
+    pauseToast();
+    showToast('B');
+    vi.advanceTimersByTime(5000);
+    expect(toast.current).toBeNull();
   });
 });
