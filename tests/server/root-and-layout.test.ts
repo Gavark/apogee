@@ -12,6 +12,11 @@ const user: User = {
   isAdmin: 1,
   timezone: 'Europe/Paris',
   locale: 'fr',
+  notifyPhases: 1,
+  notifyMonthly: 1,
+  lastDispatchDate: null,
+  lastDispatchAt: null,
+  lastMonthlyMonth: null,
   householdId: 3,
   createdAt: 1,
   updatedAt: 2

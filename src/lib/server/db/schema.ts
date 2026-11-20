@@ -14,6 +14,11 @@ export const users = sqliteTable('users', {
   isAdmin: integer('is_admin').notNull().default(0),
   timezone: text('timezone').notNull().default('Europe/Paris'),
   locale: text('locale').notNull().default('fr'),
+  notifyPhases: integer('notify_phases').notNull().default(1),
+  notifyMonthly: integer('notify_monthly').notNull().default(1),
+  lastDispatchDate: text('last_dispatch_date'), // YYYY-MM-DD, jour du dernier envoi quotidien
+  lastDispatchAt: integer('last_dispatch_at'),
+  lastMonthlyMonth: text('last_monthly_month'), // YYYY-MM
   householdId: integer('household_id')
     .notNull()
     .references(() => households.id, { onDelete: 'restrict' }),
@@ -53,6 +58,23 @@ export const appConfig = sqliteTable('app_config', {
   value: text('value').notNull(),
   updatedAt: integer('updated_at').notNull().default(sql`(unixepoch())`)
 });
+
+export const pushSubscriptions = sqliteTable(
+  'push_subscriptions',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    userId: integer('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    endpoint: text('endpoint').notNull().unique(),
+    p256dh: text('p256dh').notNull(),
+    auth: text('auth').notNull(),
+    userAgent: text('user_agent'),
+    createdAt: integer('created_at').notNull().default(sql`(unixepoch())`),
+    lastSeenAt: integer('last_seen_at').notNull().default(sql`(unixepoch())`)
+  },
+  (t) => ({
+    userIdx: index('push_subscriptions_user_id').on(t.userId)
+  })
+);
 
 export const locations = sqliteTable(
   'locations',
