@@ -9,6 +9,8 @@
   import * as m from '$paraglide/messages';
   import BottomNav from '$lib/components/BottomNav.svelte';
   import Button from '$lib/components/Button.svelte';
+  import NetworkRequired from '$lib/components/NetworkRequired.svelte';
+  import { network } from '$lib/offline/online.svelte';
   import Card from '$lib/components/Card.svelte';
   import Field from '$lib/components/Field.svelte';
   import LocaleSwitcher from '$lib/components/LocaleSwitcher.svelte';
@@ -77,6 +79,7 @@
 <svelte:head><title>{m.account_page_title()}</title></svelte:head>
 
 <h1>{m.account_title()}</h1>
+<NetworkRequired />
 <p class="muted">
   {m.account_signed_in_as()} <strong>{data.account.email}</strong>
   {#if data.account.isAdmin}<span class="badge badge-ready">{m.account_badge_admin()}</span>{/if}
@@ -166,7 +169,7 @@
           autocomplete="new-password"
           error={errors.confirm}
         />
-        <Button type="submit">{m.account_password_submit()}</Button>
+        <Button type="submit" disabled={!network.online}>{m.account_password_submit()}</Button>
       </form>
     </Card>
   </section>
@@ -187,7 +190,7 @@
             </div>
             {#if !s.isCurrent}
               <form method="POST" action="/account/sessions/{s.id}" use:enhance>
-                <Button type="submit" variant="ghost" size="sm">{m.account_sessions_revoke()}</Button>
+                <Button type="submit" variant="ghost" size="sm" disabled={!network.online}>{m.account_sessions_revoke()}</Button>
               </form>
             {/if}
           </Card>

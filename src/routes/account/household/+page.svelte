@@ -5,6 +5,8 @@
   import * as m from '$paraglide/messages';
   import BottomNav from '$lib/components/BottomNav.svelte';
   import Button from '$lib/components/Button.svelte';
+  import NetworkRequired from '$lib/components/NetworkRequired.svelte';
+  import { network } from '$lib/offline/online.svelte';
   import Card from '$lib/components/Card.svelte';
   import CopyLink from '$lib/components/CopyLink.svelte';
   import { formatDate } from '$lib/format';
@@ -24,6 +26,7 @@
 <p><a class="back" href="/account"><ArrowLeft size={16} aria-hidden="true" /> {m.account_back()}</a></p>
 
 <h1>{data.householdName}</h1>
+<NetworkRequired />
 
 <div class="stack">
   <section>
@@ -54,7 +57,7 @@
         if (result.type === 'success') showToast(m.invite_created());
       }}
     >
-      <Button type="submit">
+      <Button type="submit" disabled={!network.online}>
         <UserPlus size={18} aria-hidden="true" />
         {m.household_invite()}
       </Button>

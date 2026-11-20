@@ -463,6 +463,7 @@
       }
     }
   ],
+  "network_required": "This screen needs a network connection",
   "offline_banner": "Offline",
   "offline_banner_since": "Offline — data from {date}",
   "logout_unsynced_title": "Unsynced changes",

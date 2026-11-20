@@ -463,6 +463,7 @@
       }
     }
   ],
+  "network_required": "Cet écran nécessite le réseau",
   "offline_banner": "Hors ligne",
   "offline_banner_since": "Hors ligne — données du {date}",
   "logout_unsynced_title": "Gestes non synchronisés",

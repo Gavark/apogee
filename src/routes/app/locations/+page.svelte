@@ -7,6 +7,8 @@
   import MapPin from 'phosphor-svelte/lib/MapPin';
   import * as m from '$paraglide/messages';
   import Button from '$lib/components/Button.svelte';
+  import NetworkRequired from '$lib/components/NetworkRequired.svelte';
+  import { network } from '$lib/offline/online.svelte';
   import Card from '$lib/components/Card.svelte';
   import EmptyState from '$lib/components/EmptyState.svelte';
   import Field from '$lib/components/Field.svelte';
@@ -41,6 +43,7 @@
 
 <h1>{m.loc_title()}</h1>
 <p class="muted">{m.loc_intro()}</p>
+<NetworkRequired />
 
 <div class="stack">
   <Card>
@@ -55,7 +58,7 @@
         autocomplete="off"
         error={createError}
       />
-      <Button type="submit">{m.loc_add_submit()}</Button>
+      <Button type="submit" disabled={!network.online}>{m.loc_add_submit()}</Button>
     </form>
   </Card>
 
@@ -81,7 +84,7 @@
                   error={rowError(loc.id)}
                 />
                 <div class="row-actions">
-                  <Button type="submit" size="sm">{m.loc_save()}</Button>
+                  <Button type="submit" size="sm" disabled={!network.online}>{m.loc_save()}</Button>
                   <Button variant="ghost" size="sm" onclick={() => (editingId = null)}>{m.loc_cancel()}</Button>
                 </div>
               </form>
@@ -95,7 +98,7 @@
                   <form method="POST" action="?/move" use:enhance={afterAction}>
                     <input type="hidden" name="id" value={loc.id} />
                     <input type="hidden" name="dir" value="up" />
-                    <Button type="submit" variant="ghost" size="sm" disabled={i === 0} aria-label={m.loc_move_up()}>
+                    <Button type="submit" variant="ghost" size="sm" disabled={!network.online || i === 0} aria-label={m.loc_move_up()}>
                       <ArrowUp size={18} aria-hidden="true" />
                     </Button>
                   </form>
@@ -106,7 +109,7 @@
                       type="submit"
                       variant="ghost"
                       size="sm"
-                      disabled={i === data.locations.length - 1}
+                      disabled={!network.online || i === data.locations.length - 1}
                       aria-label={m.loc_move_down()}
                     >
                       <ArrowDown size={18} aria-hidden="true" />
@@ -117,7 +120,7 @@
                   </Button>
                   <form method="POST" action="?/delete" use:enhance={afterAction}>
                     <input type="hidden" name="id" value={loc.id} />
-                    <Button type="submit" variant="ghost" size="sm" aria-label={m.loc_delete()}>
+                    <Button type="submit" variant="ghost" size="sm" disabled={!network.online} aria-label={m.loc_delete()}>
                       <Trash size={18} aria-hidden="true" />
                     </Button>
                   </form>

@@ -5,6 +5,8 @@
   import * as m from '$paraglide/messages';
   import BottomNav from '$lib/components/BottomNav.svelte';
   import Button from '$lib/components/Button.svelte';
+  import NetworkRequired from '$lib/components/NetworkRequired.svelte';
+  import { network } from '$lib/offline/online.svelte';
   import Card from '$lib/components/Card.svelte';
   import CopyLink from '$lib/components/CopyLink.svelte';
   import Sheet from '$lib/components/Sheet.svelte';
@@ -47,6 +49,7 @@
 <p><a class="back" href="/account"><ArrowLeft size={16} aria-hidden="true" /> {m.account_back()}</a></p>
 
 <h1>{m.admin_title()}</h1>
+<NetworkRequired />
 <p class="muted">{m.admin_privacy_note()}</p>
 
 {#if form?.error}<p class="form-alert" role="alert">{form.error}</p>{/if}
@@ -78,6 +81,7 @@
                     <Button
                       variant="ghost"
                       size="sm"
+                      disabled={!network.online}
                       onclick={() => (target = { kind: 'user', id: member.id, label: member.email })}
                     >
                       {m.admin_delete_user()}
@@ -90,6 +94,7 @@
               <Button
                 variant="danger"
                 size="sm"
+                disabled={!network.online}
                 onclick={() => (target = { kind: 'household', id: h.id, label: h.name })}
               >
                 {m.admin_delete_household()}
@@ -131,7 +136,7 @@
           };
         }}
       >
-        <Button type="submit" variant="secondary" disabled={testing}>{m.admin_ai_test()}</Button>
+        <Button type="submit" variant="secondary" disabled={testing || !network.online}>{m.admin_ai_test()}</Button>
         <p class="muted hint">{m.admin_ai_test_hint()}</p>
       </form>
       {#if form?.aiTest}
@@ -148,7 +153,7 @@
     <h2>{m.admin_invitations()}</h2>
     <p class="muted">{m.admin_invite_intro()}</p>
     <form method="POST" action="?/inviteHousehold" use:enhance={afterAction(m.invite_created())}>
-      <Button type="submit">{m.admin_invite_household()}</Button>
+      <Button type="submit" disabled={!network.online}>{m.admin_invite_household()}</Button>
     </form>
 
     {#if data.invitations.length === 0}
@@ -198,7 +203,7 @@
       class="confirm"
     >
       <input type="hidden" name="id" value={target.id} />
-      <Button type="submit" variant="danger" block>{m.admin_confirm_delete()}</Button>
+      <Button type="submit" variant="danger" block disabled={!network.online}>{m.admin_confirm_delete()}</Button>
       <Button variant="ghost" block onclick={() => (target = null)}>{m.admin_confirm_cancel()}</Button>
     </form>
   {/if}

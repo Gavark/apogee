@@ -7,6 +7,8 @@
   import * as m from '$paraglide/messages';
   import BottomNav from '$lib/components/BottomNav.svelte';
   import Button from '$lib/components/Button.svelte';
+  import NetworkRequired from '$lib/components/NetworkRequired.svelte';
+  import { network } from '$lib/offline/online.svelte';
   import Card from '$lib/components/Card.svelte';
   import EnablePushButton from '$lib/components/EnablePushButton.svelte';
   import { formatDateTime } from '$lib/format';
@@ -92,6 +94,7 @@
 <p><a class="back" href="/account"><ArrowLeft size={16} aria-hidden="true" /> {m.account_back()}</a></p>
 
 <h1>{m.notif_page_title()}</h1>
+<NetworkRequired />
 
 <div class="stack">
   <section>
@@ -124,6 +127,7 @@
             type="checkbox"
             name="notify_phases"
             checked={data.notifyPhases}
+            disabled={!network.online}
             onchange={(e) => e.currentTarget.form?.requestSubmit()}
           />
           <span>
@@ -136,6 +140,7 @@
             type="checkbox"
             name="notify_monthly"
             checked={data.notifyMonthly}
+            disabled={!network.online}
             onchange={(e) => e.currentTarget.form?.requestSubmit()}
           />
           <span>
@@ -166,7 +171,7 @@
                   })}
                 </p>
               </div>
-              <Button variant="ghost" size="sm" onclick={() => remove(d.id)}>{m.notif_device_remove()}</Button>
+              <Button variant="ghost" size="sm" disabled={!network.online} onclick={() => remove(d.id)}>{m.notif_device_remove()}</Button>
             </Card>
           </li>
         {/each}
@@ -184,7 +189,7 @@
             showToast((code ? testMessages[code] : m.notif_test_failed)());
           }}
       >
-        <Button type="submit" variant="secondary" block>
+        <Button type="submit" variant="secondary" block disabled={!network.online}>
           <PaperPlaneTilt size={18} aria-hidden="true" />
           {m.notif_test_button()}
         </Button>

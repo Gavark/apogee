@@ -5,6 +5,8 @@
   import MapPin from 'phosphor-svelte/lib/MapPin';
   import * as m from '$paraglide/messages';
   import Button from '$lib/components/Button.svelte';
+  import NetworkRequired from '$lib/components/NetworkRequired.svelte';
+  import { network } from '$lib/offline/online.svelte';
   import Card from '$lib/components/Card.svelte';
   import EmptyState from '$lib/components/EmptyState.svelte';
   import Field from '$lib/components/Field.svelte';
@@ -134,6 +136,7 @@
 <svelte:head><title>{m.add_page_title()}</title></svelte:head>
 
 <h1>{m.add_title()}</h1>
+<NetworkRequired />
 
 {#if data.locations.length === 0}
   <EmptyState title={m.add_no_location_title()} description={m.add_no_location_desc()} icon={MapPin}>
@@ -158,8 +161,8 @@
             <h2>{m.add_dup_title()}</h2>
             <p>{m.add_dup_body({ count: duplicate.bottles })}</p>
             <div class="dup-actions">
-              <Button type="submit" name="confirmDuplicate" value="add-stock" block>{m.add_dup_add_stock()}</Button>
-              <Button type="submit" name="confirmDuplicate" value="new" variant="secondary" block>{m.add_dup_new()}</Button>
+              <Button type="submit" name="confirmDuplicate" value="add-stock" block disabled={!network.online}>{m.add_dup_add_stock()}</Button>
+              <Button type="submit" name="confirmDuplicate" value="new" variant="secondary" block disabled={!network.online}>{m.add_dup_new()}</Button>
               <Button href="/app/wines/{duplicate.wineId}" variant="ghost" block>{m.add_dup_view()}</Button>
             </div>
           </div>
@@ -225,7 +228,7 @@
         />
       </fieldset>
 
-      <Button type="submit" block><Plus size={20} weight="bold" aria-hidden="true" />{m.add_submit()}</Button>
+      <Button type="submit" block disabled={!network.online}><Plus size={20} weight="bold" aria-hidden="true" />{m.add_submit()}</Button>
     </form>
   {/key}
 {/if}

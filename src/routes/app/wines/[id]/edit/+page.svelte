@@ -2,6 +2,8 @@
   import { enhance } from '$app/forms';
   import * as m from '$paraglide/messages';
   import Button from '$lib/components/Button.svelte';
+  import NetworkRequired from '$lib/components/NetworkRequired.svelte';
+  import { network } from '$lib/offline/online.svelte';
   import WineForm from '$lib/components/WineForm.svelte';
 
   let { data, form } = $props();
@@ -13,11 +15,12 @@
 <svelte:head><title>{m.wine_edit_page_title()}</title></svelte:head>
 
 <h1>{m.wine_edit_title()}</h1>
+<NetworkRequired />
 
 <form method="POST" use:enhance={() => async ({ update }) => update({ reset: false })} class="stack">
   <WineForm {values} {error} />
   <div class="actions">
-    <Button type="submit" block>{m.wine_save()}</Button>
+    <Button type="submit" block disabled={!network.online}>{m.wine_save()}</Button>
     <Button href="/app/wines/{data.wineId}" variant="ghost" block>{m.wine_cancel()}</Button>
   </div>
 </form>
