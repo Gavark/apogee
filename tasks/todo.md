@@ -40,7 +40,12 @@ Détail : `docs/superpowers/plans/2026-11-20-apogee-p2b-sauvegarde.md`
   - [x] Task 7 : admin IA, docs
   - [x] Vérification finale (revue de branche + 12 corrections relues)
   - [x] Essai réel avec une vraie clé : 1er appel refusé (400, enum + type tableau dans le schéma) → corrigé en anyOf ; étiquette de test Gigondas 2018 lue en 5,3 s (~1,4 ct) ; étiquette réelle Gevrey-Chambertin sans millésime lue en 6,2 s (~1,8 ct), confiance faible justifiée
-- [ ] Plan 3 : notifications (phases + rappel mensuel)
+- [ ] Plan 3 : notifications — `docs/superpowers/plans/2026-11-20-apogee-p3-notifications.md`
+  - [ ] Task 1 : abonnements push et envoi
+  - [ ] Task 2 : suivi des phases
+  - [ ] Task 3 : résumé quotidien et rappel mensuel
+  - [ ] Task 4 : réglages, appareils, service worker
+  - [ ] Vérification finale + essai réel
 - [ ] Plan 4 : réseau intermittent et resynchronisation
 
 ## Revue (plan 1, 2026-11-20)
