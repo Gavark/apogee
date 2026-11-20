@@ -65,7 +65,7 @@ services:
     entrypoint: ["/bin/sh", "-c"]
     command:
       - |
-        apk add --no-cache sqlite tzdata >/dev/null
+        apk add --no-cache sqlite tzdata >/dev/null || { echo "[boot] apk add failed"; exit 1; }
         echo "$${BACKUP_SCHEDULE} BACKUP_RETENTION=$${BACKUP_RETENTION} sh /usr/local/bin/run-backup >> /proc/1/fd/1 2>&1" | crontab -
         echo "[boot] cron registered: $${BACKUP_SCHEDULE}"
         echo "[boot] retention: $${BACKUP_RETENTION} backups"

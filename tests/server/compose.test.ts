@@ -53,4 +53,8 @@ it('docker-compose : service backup (alpine, ./data en lecture seule, ./backups,
   // `$$` keeps compose from interpolating the variables of the startup command
   expect(backup).toContain('$' + '${BACKUP_SCHEDULE}');
   expect(backup).toContain('$' + '${BACKUP_RETENTION}');
+  // a failed `apk add` at boot must stop the container so `restart: unless-stopped` retries
+  expect(backup).toContain(
+    'apk add --no-cache sqlite tzdata >/dev/null || { echo "[boot] apk add failed"; exit 1; }'
+  );
 });

@@ -4,7 +4,7 @@ import { mkdtempSync, readdirSync, readFileSync, existsSync, rmSync } from 'node
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
-const dockerAvailable = spawnSync('docker', ['info']).status === 0;
+const dockerAvailable = spawnSync('docker', ['info'], { timeout: 10_000 }).status === 0;
 const repoScripts = resolve('scripts');
 
 // One alpine container plays every scenario in its own folder under /work; the
@@ -46,16 +46,27 @@ mkdb /work/corrupt/backups/apogee-20200101T000000Z.sqlite
 mkdb /work/corrupt/backups/apogee-20200102T000000Z.sqlite
 run corrupt 1
 
-# 5. rotation: 4 pairs + hand-named copies, retention 2
+# 5. rotation by NAME: 4 pairs + hand-named copies, retention 2. The mtimes are
+# deliberately reversed (oldest name = newest mtime) to prove mtime plays no part.
 setup rotation; mkdb /work/rotation/data/apogee.sqlite
 mkdir /work/rotation/data/photos; echo img >/work/rotation/data/photos/a.jpg
 b=/work/rotation/backups
 for i in 1 2 3 4; do
-  d="2020010$i"; touch -d "2020-01-0$i 00:00:00" "$b/apogee-"$d"T000000Z.sqlite"
-  touch -d "2020-01-0$i 00:00:00" "$b/apogee-photos-"$d"T000000Z.tar.gz"
+  d="2020010$i"; touch -d "2020-01-0$((5 - i)) 00:00:00" "$b/apogee-"$d"T000000Z.sqlite"
+  touch -d "2020-01-0$((5 - i)) 00:00:00" "$b/apogee-photos-"$d"T000000Z.tar.gz"
 done
 touch -d "2019-01-01 00:00:00" "$b/apogee-avant-maj.sqlite" "$b/apogee-photos-avant-maj.tar.gz"
 run rotation 2
+
+# 5b. leftovers of an interrupted run: swept at start, never rotated or kept
+setup partial; mkdb /work/partial/data/apogee.sqlite
+mkdir /work/partial/data/photos; echo img >/work/partial/data/photos/a.jpg
+b=/work/partial/backups
+echo x >"$b/.apogee-20200101T000000Z.sqlite.partial"
+echo x >"$b/.apogee-20200101T000000Z.sqlite.partial-journal"
+echo x >"$b/.apogee-photos-20200101T000000Z.tar.gz.partial"
+mkdb "$b/apogee-20200101T000000Z.sqlite"
+run partial 1
 
 # 6/7. valid database, photos archive fails (tar stub: fails on create / fails only
 # on the read-back), two old pairs, retention 1: DB snapshot kept, no archive left,
@@ -188,7 +199,23 @@ describe('scripts/run-backup.sh', () => {
   }
 
   it.skipIf(!dockerAvailable)(
-    'rotation : avec BACKUP_RETENTION=2 et 4 paires existantes, il reste les 2 plus récentes de chaque type ; apogee-avant-maj.sqlite est conservé',
+    'fichiers .partial résiduels : balayés au démarrage, jamais pris pour une sauvegarde ; succès sans .partial',
+    () => {
+      expect(exitCode('partial')).toBe(0);
+      const files = readdirSync(join(tmp, 'partial', 'backups')).sort();
+      expect(files.filter((f) => f.includes('.partial'))).toEqual([]);
+      expect(files).toHaveLength(2);
+      expect(files[0]).toMatch(/^apogee-\d{8}T\d{6}Z\.sqlite$/);
+      expect(files[1]).toMatch(/^apogee-photos-\d{8}T\d{6}Z\.tar\.gz$/);
+      expect(files).not.toContain('apogee-20200101T000000Z.sqlite');
+      for (const sc of ['ok', 'photofail-create', 'photofail-list', 'corrupt']) {
+        expect(readdirSync(join(tmp, sc, 'backups')).filter((f) => f.includes('.partial'))).toEqual([]);
+      }
+    }
+  );
+
+  it.skipIf(!dockerAvailable)(
+    'rotation (par nom, pas par date de modification) : avec BACKUP_RETENTION=2 et 4 paires existantes, il reste les 2 plus récentes de chaque type ; apogee-avant-maj.sqlite est conservé',
     () => {
       expect(exitCode('rotation')).toBe(0);
       const files = backups('rotation');
