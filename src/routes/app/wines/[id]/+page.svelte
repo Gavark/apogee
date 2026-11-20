@@ -13,6 +13,7 @@
   import AiEstimateSheet from '$lib/components/AiEstimateSheet.svelte';
   import WindowTimeline from '$lib/components/WindowTimeline.svelte';
   import { applyPending } from '$lib/offline/overlay';
+  import { network } from '$lib/offline/online.svelte';
   import { pendingOps, reload } from '$lib/offline/pending.svelte';
   import { newOpId, sendStockOps, SessionExpiredError, undoGesture, type ClientOpResult } from '$lib/stock-client';
   import { showToast } from '$lib/toast.svelte';
@@ -174,7 +175,7 @@
     {/if}
     {#if data.aiEnabled}
       <div class="estimate">
-        <Button variant="secondary" size="sm" onclick={() => (estimating = true)}>
+        <Button variant="secondary" size="sm" disabled={!network.online} onclick={() => (estimating = true)}>
           {m.wine_ai_reestimate()}
         </Button>
       </div>
@@ -227,7 +228,7 @@
 
   <div class="actions">
     <Button variant="secondary" href="/app/wines/{wine.id}/edit"><PencilSimple size={18} aria-hidden="true" />{m.wine_edit()}</Button>
-    <Button variant="ghost" onclick={() => (confirmingDelete = true)}><Trash size={18} aria-hidden="true" />{m.wine_delete()}</Button>
+    <Button variant="ghost" disabled={!network.online} onclick={() => (confirmingDelete = true)}><Trash size={18} aria-hidden="true" />{m.wine_delete()}</Button>
   </div>
 </div>
 
@@ -266,7 +267,7 @@
 <Sheet open={confirmingDelete} onclose={() => (confirmingDelete = false)} title={m.wine_delete_title()}>
   <p>{m.wine_delete_body()}</p>
   <form method="POST" action="?/delete" use:enhance class="sheet-form">
-    <Button type="submit" variant="danger" block>{m.wine_delete_confirm()}</Button>
+    <Button type="submit" variant="danger" block disabled={!network.online}>{m.wine_delete_confirm()}</Button>
     <Button variant="ghost" block onclick={() => (confirmingDelete = false)}>{m.wine_cancel()}</Button>
   </form>
 </Sheet>

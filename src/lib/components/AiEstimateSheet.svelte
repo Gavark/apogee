@@ -8,6 +8,7 @@
   import WindowTimeline from '$lib/components/WindowTimeline.svelte';
   import { analyzeLabel } from '$lib/label-client';
   import { SessionExpiredError } from '$lib/stock-client';
+  import { network } from '$lib/offline/online.svelte';
   import { reestimateErrorMessage, confidenceLabel } from '$lib/wine-labels';
   import type { WindowYears } from '$lib/phase';
   import type { LabelAnalysis } from '$lib/server/ai/types';
@@ -40,6 +41,10 @@
     const mine = ++run;
     view = { kind: 'loading' };
     applyError = null;
+    if (!network.online) {
+      view = { kind: 'error', message: m.network_required() };
+      return;
+    }
     let next: State;
     try {
       const outcome = await analyzeLabel({ wineId: id });
@@ -100,7 +105,7 @@
         }}
       >
         <input type="hidden" name="analysisId" value={view.analysisId} />
-        <Button type="submit" block disabled={applying}>{m.ai_est_apply()}</Button>
+        <Button type="submit" block disabled={applying || !network.online}>{m.ai_est_apply()}</Button>
         <Button variant="ghost" block onclick={onclose}>{m.ai_est_keep()}</Button>
       </form>
     {/if}
