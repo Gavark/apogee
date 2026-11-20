@@ -1,16 +1,21 @@
 import { goto } from '$app/navigation';
 import { page } from '$app/state';
 import * as m from '$paraglide/messages';
+import { newOpId } from '$lib/offline/op-id';
 import { enqueue, listQueued, removeQueued } from '$lib/offline/queue';
-import { syncIdle, syncNow, withSyncLock } from '$lib/offline/sync';
+import { postOps, syncIdle, syncNow, withSyncLock } from '$lib/offline/sync';
 import {
+  applyResults,
   claimOps,
   forgetOps,
+  inverseOf,
+  markStored,
   rememberResults,
   reload,
   requestBackgroundSync,
   resultFor,
-  trackOps
+  trackOps,
+  undoWhenSynced
 } from '$lib/offline/pending.svelte';
 import { showToast } from '$lib/toast.svelte';
 import type { OpResult, StockOp } from '$lib/server/stock';
@@ -18,15 +23,7 @@ import type { OpResult, StockOp } from '$lib/server/stock';
 /** A server result, or `queued`: stored on the device, sent once the network allows. */
 export type ClientOpResult = OpResult | { opId: string; status: 'queued' };
 
-/** A fresh idempotency key. randomUUID needs a secure context; plain-http LAN access falls back. */
-export function newOpId(): string {
-  if (typeof crypto.randomUUID === 'function') return crypto.randomUUID();
-  const b = crypto.getRandomValues(new Uint8Array(16));
-  b[6] = (b[6] & 0x0f) | 0x40;
-  b[8] = (b[8] & 0x3f) | 0x80;
-  const h = [...b].map((x) => x.toString(16).padStart(2, '0')).join('');
-  return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`;
-}
+export { newOpId };
 
 /** The session is gone (HTTP 401): the user has been sent to /login, callers should stay silent. */
 export class SessionExpiredError extends Error {
@@ -72,6 +69,7 @@ export async function sendStockOps(ops: StockOp[]): Promise<ClientOpResult[]> {
   try {
     try {
       for (const op of ops) await enqueue(userId, op);
+      markStored(ops.map((o) => o.opId));
     } catch {
       // No usable IndexedDB (storage blocked, private mode): no offline mode, send directly.
       forgetOps(ops.map((o) => o.opId));
@@ -96,34 +94,48 @@ export async function sendStockOps(ops: StockOp[]): Promise<ClientOpResult[]> {
   }
 }
 
-/** The op that cancels `op`, given its server result; null when there is nothing (or no way) to undo. */
-function inverseOf(op: StockOp, r: OpResult | undefined): StockOp | null {
-  if (!r || r.status === 'rejected') return null;
-  if (op.kind === 'consume' && r.consumptionId !== undefined) {
-    return { opId: newOpId(), kind: 'unconsume', consumptionId: r.consumptionId };
-  }
-  if (op.kind === 'adjust' && r.appliedQuantity) {
-    return { opId: newOpId(), kind: 'adjust', lotId: op.lotId, delta: -r.appliedQuantity };
-  }
-  return null;
-}
-
 /**
- * Cancels a gesture: still queued → removed from the queue, nothing is ever sent (`unqueued`);
- * already applied → sends the inverse op built from its result (that op's result); result unknown → null.
+ * Cancels a gesture:
+ * - queued and never attempted → removed from the queue, nothing is ever sent (`unqueued`);
+ * - queued but attempted (5xx, lost reply: maybe applied) → replayed first (idempotent: the server
+ *   answers with the stored result), then its inverse is sent; without network, the undo waits for
+ *   the next sync (`deferred`);
+ * - already synced → sends the inverse built from its known result; result unknown → null.
+ * Resolves with the inverse op's result in the last two cases.
  */
-export async function undoStockOp(op: StockOp): Promise<ClientOpResult | 'unqueued' | null> {
+export async function undoStockOp(op: StockOp): Promise<ClientOpResult | 'unqueued' | 'deferred' | null> {
   const userId = currentUserId();
   if (userId !== undefined) {
     // Under the sync lock: the op cannot be on its way to the server while we look.
-    const removed = await withSyncLock(async () => {
-      if (!(await listQueued(userId)).some((q) => q.op.opId === op.opId)) return false;
+    const step = await withSyncLock(async () => {
+      const q = (await listQueued(userId)).find((x) => x.op.opId === op.opId);
+      if (!q) return 'synced' as const;
+      if (q.attempts === 0) {
+        await removeQueued([op.opId]);
+        return 'unqueued' as const;
+      }
+      const res = await postOps([op]);
+      if (res.kind === 'invalid') {
+        await removeQueued([op.opId]); // never accepted, so never applied
+        return 'unqueued' as const;
+      }
+      if (res.kind !== 'ok') return res.kind;
       await removeQueued([op.opId]);
-      return true;
-    }).catch(() => false);
-    if (removed) {
+      applyResults(res.results);
+      return 'synced' as const;
+    }).catch(() => 'synced' as const);
+    if (step === 'unqueued') {
       forgetOps([op.opId]);
       return 'unqueued';
+    }
+    if (step === 'unauthorized') {
+      await goto('/login');
+      throw new SessionExpiredError();
+    }
+    if (step === 'failed') {
+      undoWhenSynced(op);
+      requestBackgroundSync();
+      return 'deferred';
     }
   }
   const inverse = inverseOf(op, resultFor(op.opId));
@@ -140,6 +152,9 @@ export async function undoGesture(op: StockOp): Promise<void> {
     if (r === 'unqueued') {
       changed = false;
       showToast(m.wine_toast_undone());
+    } else if (r === 'deferred') {
+      changed = false;
+      showToast(m.offline_undo_deferred());
     } else if (r?.status === 'queued') {
       changed = false;
       showToast(m.offline_saved());

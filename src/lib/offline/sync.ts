@@ -62,6 +62,34 @@ const timeoutSignal = (): AbortSignal | undefined =>
     ? AbortSignal.timeout(REQUEST_TIMEOUT_MS)
     : undefined;
 
+export type PostOutcome =
+  | { kind: 'ok'; results: OpResult[] }
+  | { kind: 'invalid' } // 400: the server will never accept these ops
+  | { kind: 'unauthorized' }
+  | { kind: 'failed' }; // 5xx, network failure, timeout or unreadable body: maybe applied, replay later
+
+/** One POST of `ops` to the stock endpoint. Ops are idempotent by opId: replaying one returns its stored result. */
+export async function postOps(ops: StockOp[], doFetch: typeof fetch = fetch): Promise<PostOutcome> {
+  try {
+    const res = await doFetch('/api/stock/ops', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ ops }),
+      credentials: 'same-origin',
+      signal: timeoutSignal()
+    });
+    if (res.status === 401) return { kind: 'unauthorized' };
+    if (res.status === 400) return { kind: 'invalid' };
+    if (res.ok) {
+      const body = (await res.json()) as { results?: unknown };
+      if (Array.isArray(body.results)) return { kind: 'ok', results: body.results as OpResult[] };
+    }
+  } catch {
+    // fall through
+  }
+  return { kind: 'failed' };
+}
+
 async function run(userId: number, doFetch: typeof fetch): Promise<SyncOutcome> {
   const out: SyncOutcome = { sent: 0, results: [], dropped: [], status: 'ok' };
   const queued = await listQueued(userId);
@@ -71,40 +99,25 @@ async function run(userId: number, doFetch: typeof fetch): Promise<SyncOutcome> 
   for (let i = 0; i < queued.length; i += SYNC_BATCH_SIZE) {
     const ops = queued.slice(i, i + SYNC_BATCH_SIZE).map((q) => q.op);
     const ids = ops.map((o) => o.opId);
-    let results: OpResult[] | null = null;
-    try {
-      const res = await doFetch('/api/stock/ops', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ ops }),
-        credentials: 'same-origin',
-        signal: timeoutSignal()
-      });
-      if (res.status === 401) {
-        out.status = 'unauthorized'; // nothing removed: sent again once logged back in
-        break;
-      }
-      if (res.status === 400) {
-        // The server will never accept this batch: keep it from blocking the queue.
-        await removeQueued(ids);
-        out.dropped.push(...ops);
-        continue;
-      }
-      if (res.ok) {
-        const body = (await res.json()) as { results?: unknown };
-        if (Array.isArray(body.results)) results = body.results as OpResult[];
-      }
-    } catch {
-      // Network failure, timeout or unreadable body: ops are idempotent, the batch is replayed later.
+    const res = await postOps(ops, doFetch);
+    if (res.kind === 'unauthorized') {
+      out.status = 'unauthorized'; // nothing removed: sent again once logged back in
+      break;
     }
-    if (!results) {
-      await bumpAttempts(ids);
+    if (res.kind === 'invalid') {
+      // Never accepted, so never applied: keep it from blocking the queue.
+      await removeQueued(ids);
+      out.dropped.push(...ops);
+      continue;
+    }
+    if (res.kind === 'failed') {
+      await bumpAttempts(ids); // attempts > 0: from now on the batch may have been applied
       out.status = 'retry';
       break;
     }
     await removeQueued(ids);
     out.sent += ops.length;
-    out.results.push(...results);
+    out.results.push(...res.results);
   }
   return out;
 }

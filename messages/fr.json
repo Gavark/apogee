@@ -446,6 +446,7 @@
   "drink_toast": "Bue · {wine}",
   "drink_empty_lot": "Plus de bouteille à cet endroit",
   "offline_saved": "Enregistré, sera synchronisé",
+  "offline_undo_deferred": "L'annulation sera appliquée à la synchronisation",
   "offline_op_failed": "Une opération n'a pas pu être appliquée",
   "offline_pending": [
     {

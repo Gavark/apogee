@@ -446,6 +446,7 @@
   "drink_toast": "Drunk · {wine}",
   "drink_empty_lot": "No bottle left at this spot",
   "offline_saved": "Saved, will sync",
+  "offline_undo_deferred": "The undo will be applied when syncing",
   "offline_op_failed": "An operation could not be applied",
   "offline_pending": [
     {

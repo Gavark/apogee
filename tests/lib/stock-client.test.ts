@@ -11,8 +11,8 @@ vi.mock('$app/navigation', () => ({ goto, invalidateAll }));
 vi.mock('$app/state', () => ({ page }));
 
 import { sendStockOps, SessionExpiredError, undoStockOp } from '../../src/lib/stock-client';
-import { listQueued, _resetForTests } from '$lib/offline/queue';
-import { pendingCount, pendingOps, startSyncLoop, syncPending, _resetPendingForTests } from '$lib/offline/pending.svelte';
+import { listQueued, removeQueued, _resetForTests } from '$lib/offline/queue';
+import { pendingCount, pendingOps, startSyncLoop, syncPending, trackOps, _resetPendingForTests } from '$lib/offline/pending.svelte';
 import { dismissToast, toast } from '$lib/toast.svelte';
 import * as m from '$paraglide/messages';
 import type { OpResult, StockOp } from '$lib/server/stock';
@@ -32,6 +32,14 @@ function serve(answer: (o: StockOp) => OpResult = (o) => ({ opId: o.opId, status
   return { fetch, batches };
 }
 const offline = () => vi.stubGlobal('fetch', vi.fn(async () => Promise.reject(new TypeError('Failed to fetch'))));
+/** The browser knows it is offline: nothing is even attempted (attempts stay at 0). */
+const knownOffline = () => {
+  vi.stubGlobal('navigator', { onLine: false });
+  const fetch = vi.fn(async () => new Response('{}', { status: 599 }));
+  vi.stubGlobal('fetch', fetch);
+  return fetch;
+};
+const backOnline = () => vi.stubGlobal('navigator', { onLine: true });
 
 beforeEach(() => {
   goto.mockClear();
@@ -143,10 +151,12 @@ describe('sendStockOps via la file', () => {
 describe('undoStockOp', () => {
   beforeEach(() => (page.data = { user: { id: 1 } }));
 
-  it('geste encore en file → retiré, rien n’est envoyé', async () => {
-    offline();
+  it('geste jamais tenté → retiré de la file, rien n’est envoyé', async () => {
+    const f = knownOffline();
     const g = consume('a');
     await sendStockOps([g]);
+    expect(f).not.toHaveBeenCalled();
+    backOnline();
     const s = serve();
     await expect(undoStockOp(g)).resolves.toBe('unqueued');
     expect(await listQueued(1)).toEqual([]);
@@ -176,10 +186,96 @@ describe('undoStockOp', () => {
     expect(s.batches[0]).toEqual([expect.objectContaining({ kind: 'adjust', lotId: 3, delta: 1 })]);
   });
 
+  it('après un 500 (peut-être appliqué) → rejoue le geste puis envoie l’inverse', async () => {
+    const g = consume('a');
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('{}', { status: 500 })));
+    await expect(sendStockOps([g])).resolves.toEqual([{ opId: 'a', status: 'queued' }]);
+    expect((await listQueued(1))[0].attempts).toBe(1);
+    // The server committed it before failing: the replay returns the stored result.
+    const s = serve((o) => (o.kind === 'consume' ? { opId: o.opId, status: 'applied', consumptionId: 77 } : { opId: o.opId, status: 'applied' }));
+    await expect(undoStockOp(g)).resolves.toMatchObject({ status: 'applied' });
+    expect(s.batches.map((b) => b.map((o) => o.kind))).toEqual([['consume'], ['unconsume']]);
+    expect(s.batches[0][0].opId).toBe('a');
+    expect(s.batches[1][0]).toMatchObject({ kind: 'unconsume', consumptionId: 77 });
+    expect(await listQueued(1)).toEqual([]);
+  });
+
+  it('après une réponse perdue (délai dépassé) → rejoue le geste puis envoie l’inverse', async () => {
+    const g: StockOp = { opId: 'a', kind: 'adjust', lotId: 3, delta: -1 };
+    const committed: string[] = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (_u: unknown, init?: RequestInit) => {
+        committed.push(...(JSON.parse(String(init?.body)) as { ops: StockOp[] }).ops.map((o) => o.opId));
+        throw new DOMException('The operation timed out.', 'TimeoutError');
+      })
+    );
+    await expect(sendStockOps([g])).resolves.toEqual([{ opId: 'a', status: 'queued' }]);
+    expect(committed).toEqual(['a']);
+    const s = serve((o) => ({ opId: o.opId, status: 'applied', appliedQuantity: o.kind === 'adjust' ? o.delta : undefined }));
+    await undoStockOp(g);
+    expect(s.batches).toEqual([[g], [expect.objectContaining({ kind: 'adjust', lotId: 3, delta: 1 })]]);
+    expect(await listQueued(1)).toEqual([]);
+  });
+
+  it('peut-être appliqué et toujours hors ligne → annulation différée, appliquée à la synchronisation', async () => {
+    const g = consume('a');
+    offline();
+    await sendStockOps([g]); // attempted: attempts = 1
+    await expect(undoStockOp(g)).resolves.toBe('deferred');
+    expect((await listQueued(1)).map((q) => q.op.opId)).toEqual(['a']); // kept: maybe applied
+    expect(pendingOps()).toEqual([]); // but no longer shown
+    const s = serve((o) => ({ opId: o.opId, status: 'applied', consumptionId: o.kind === 'consume' ? 8 : undefined }));
+    await syncPending(1);
+    expect(s.batches.map((b) => b.map((o) => o.kind))).toEqual([['consume'], ['unconsume']]);
+    expect(s.batches[1][0]).toMatchObject({ consumptionId: 8 });
+    expect(await listQueued(1)).toEqual([]);
+    expect(pendingCount()).toBe(0);
+    expect(toast.current).toBeNull(); // no warning for the undo itself
+    expect(invalidateAll).toHaveBeenCalled();
+  });
+
   it('résultat inconnu → rien n’est envoyé', async () => {
     const s = serve();
     await expect(undoStockOp(consume('never-seen'))).resolves.toBeNull();
     expect(s.fetch).not.toHaveBeenCalled();
+  });
+});
+
+describe('synchronisation par un autre contexte', () => {
+  beforeEach(() => (page.data = { user: { id: 1 } }));
+
+  it('gestes envoyés ailleurs (autre onglet, service worker) → données rechargées, surcouche retirée ensuite', async () => {
+    offline();
+    await sendStockOps([consume('a')]);
+    await removeQueued(['a']); // another context synced it
+    const s = serve();
+    await syncPending(1);
+    expect(s.fetch).not.toHaveBeenCalled();
+    expect(invalidateAll).toHaveBeenCalled();
+    expect(pendingOps()).toEqual([]);
+    expect(pendingCount()).toBe(0);
+  });
+
+  it('geste annulé (différé) puis envoyé ailleurs → rejoué pour connaître son résultat, puis inverse', async () => {
+    const g = consume('a');
+    offline();
+    await sendStockOps([g]);
+    await expect(undoStockOp(g)).resolves.toBe('deferred');
+    await removeQueued(['a']); // another context synced it: this tab never saw the result
+    const s = serve((o) => ({ opId: o.opId, status: 'applied', consumptionId: o.kind === 'consume' ? 3 : undefined }));
+    await syncPending(1);
+    expect(s.batches.map((b) => b.map((o) => o.kind))).toEqual([['consume'], ['unconsume']]);
+    expect(s.batches[1][0]).toMatchObject({ consumptionId: 3 });
+    expect(await listQueued(1)).toEqual([]);
+  });
+
+  it('un geste pas encore écrit dans la file n’est pas pris pour envoyé ailleurs', async () => {
+    knownOffline();
+    trackOps([consume('a')]); // what sendStockOps does before the IndexedDB write completes
+    await syncPending(1);
+    expect(pendingOps().map((o) => o.opId)).toEqual(['a']);
+    expect(invalidateAll).not.toHaveBeenCalled();
   });
 });
 
