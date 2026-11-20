@@ -1,2 +1,27 @@
-.superpowers/
 node_modules/
+.svelte-kit/
+build/
+.env
+.env.local
+*.sqlite
+*.sqlite-journal
+*.sqlite-wal
+*.sqlite-shm
+/data/
+dist/
+coverage/
+.DS_Store
+/backups/
+.claude/
+.superpowers/
+
+# Local reverse-proxy config (copy Caddyfile.example to Caddyfile)
+Caddyfile
+
+# Host-specific compose overrides (extra published ports, machine-local
+# volumes, sidecars for other apps). Deployment detail, not project config.
+docker-compose.local.yml
+docker-compose.override.yml
+
+# Understand-Anything plugin output (knowledge graph, intermediates)
+.ua/
