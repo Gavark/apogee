@@ -191,4 +191,21 @@ describe('runNotificationTick', () => {
     await tick('2027-02-01T17:00:00Z');
     expect(pushes.some((p) => p.body.includes('Ce mois-ci, 1 bouteille'))).toBe(true);
   });
+
+  it("échec transitoire sur tous les appareils : le lendemain, le push reprend les changements et le rappel", async () => {
+    member('Europe/Paris', 'a');
+    prime('2026-12-31');
+    addWine('Passe', [2000, null, null, 2020], 1); // past -> monthly reminder
+    crossing();
+    const boom: PushSender = async () => {
+      throw new Error('network');
+    };
+    expect(await tick('2027-01-05T17:00:00Z', boom)).toEqual({ processed: 1, sent: 0 });
+    expect(pushes).toHaveLength(0);
+    // still at most one push that day
+    expect(await tick('2027-01-05T19:00:00Z')).toEqual({ processed: 0, sent: 0 });
+    expect(await tick('2027-01-06T17:00:00Z')).toEqual({ processed: 1, sent: 1 });
+    expect(pushes).toHaveLength(1);
+    expect(pushes[0].body).toContain('Ce mois-ci, 1 bouteille');
+  });
 });

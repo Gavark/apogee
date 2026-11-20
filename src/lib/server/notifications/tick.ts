@@ -79,6 +79,14 @@ async function tickOnce(db: DB, now: Date, sender: PushSender): Promise<{ proces
       if (digest) {
         const res = await sendToUser(db, user.id, formatDigest(digest, locale), sender);
         if (res.sent > 0) sent++;
+        else if (res.failed > 0) {
+          // Every device failed transiently: keep the day claimed (still at most one push a day) but
+          // give the window and the monthly evaluation back, so tomorrow's digest carries everything.
+          db.update(users)
+            .set({ lastDispatchAt: user.lastDispatchAt, lastMonthlyMonth: user.lastMonthlyMonth })
+            .where(eq(users.id, user.id))
+            .run();
+        }
       }
     } catch (e) {
       console.error('[notifications] tick failed for a user:', e instanceof Error ? e.name : 'unknown');
