@@ -1,7 +1,19 @@
 // Offline queue of stock operations, persisted in IndexedDB. Framework-free: the service worker imports it.
 import type { StockOp } from '$lib/stock-ops';
 
-export type QueuedOp = { op: StockOp; userId: number; queuedAt: number; attempts: number };
+/**
+ * `undo`: the user undid this gesture while its fate was unknown (maybe applied): whoever sends it
+ * queues its inverse once its result is known. `inverseOf`: this op cancels that (undone) gesture.
+ * Kept in IndexedDB, so an undo survives the app being closed before the network returns.
+ */
+export type QueuedOp = {
+  op: StockOp;
+  userId: number;
+  queuedAt: number;
+  attempts: number;
+  undo?: true;
+  inverseOf?: string;
+};
 
 const DB_NAME = 'apogee-offline';
 /** 2: adds the `meta` store (the active user). */
@@ -93,22 +105,50 @@ async function allForUser(store: IDBObjectStore, userId: number): Promise<Stored
 
 /** Resolves true when the op was added, false when that opId was already queued (the original is kept). */
 export function enqueue(userId: number, op: StockOp): Promise<boolean> {
-  return tx('readwrite', async (store) => {
-    if (await wrap(store.getKey(op.opId))) return false; // keep the original
-    const row: Stored = { op, userId, queuedAt: Date.now(), attempts: 0, seq: ++seqCounter };
-    await wrap(store.add(row));
-    return true;
-  });
+  return tx('readwrite', (store) => addRow(store, userId, op));
+}
+
+async function addRow(store: IDBObjectStore, userId: number, op: StockOp, inverseOf?: string): Promise<boolean> {
+  if (await wrap(store.getKey(op.opId))) return false; // keep the original
+  const row: Stored = { op, userId, queuedAt: Date.now(), attempts: 0, seq: ++seqCounter };
+  if (inverseOf !== undefined) row.inverseOf = inverseOf;
+  await wrap(store.add(row));
+  return true;
 }
 
 export async function listQueued(userId: number): Promise<QueuedOp[]> {
   const rows = await tx('readonly', (store) => allForUser(store, userId));
-  return rows.map(({ op, userId: u, queuedAt, attempts }) => ({ op, userId: u, queuedAt, attempts }));
+  return rows.map(({ op, userId: u, queuedAt, attempts, undo, inverseOf }) => ({
+    op,
+    userId: u,
+    queuedAt,
+    attempts,
+    ...(undo ? { undo } : {}),
+    ...(inverseOf !== undefined ? { inverseOf } : {})
+  }));
 }
 
-export function removeQueued(opIds: string[]): Promise<void> {
+/** An inverse to queue for the user of an undone gesture (see `undo`). */
+export type QueuedInverse = { userId: number; op: StockOp; inverseOf: string };
+
+/** Removes the ops and, in the same transaction, queues `inverses`: an undo is never half recorded. */
+export function removeQueued(opIds: string[], inverses: QueuedInverse[] = []): Promise<void> {
   return tx('readwrite', async (store) => {
     await Promise.all(opIds.map((id) => wrap(store.delete(id))));
+    for (const i of inverses) await addRow(store, i.userId, i.op, i.inverseOf);
+  });
+}
+
+/**
+ * Flags a queued gesture as undone: its inverse is queued once its result is known, by whichever
+ * context sends it. Call it holding the sync lock. Resolves false when the op is no longer queued.
+ */
+export function markUndo(opId: string): Promise<boolean> {
+  return tx('readwrite', async (store) => {
+    const row = await wrap(store.get(opId) as IDBRequest<Stored | undefined>);
+    if (!row) return false;
+    await wrap(store.put({ ...row, undo: true }));
+    return true;
   });
 }
 

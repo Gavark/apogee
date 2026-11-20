@@ -12,7 +12,7 @@ vi.mock('$app/state', () => ({ page }));
 
 import { sendStockOps, SessionExpiredError, undoStockOp } from '../../src/lib/stock-client';
 import { listQueued, removeQueued, _resetForTests } from '$lib/offline/queue';
-import { pendingCount, pendingOps, startSyncLoop, syncPending, trackOps, _resetPendingForTests } from '$lib/offline/pending.svelte';
+import { pendingCount, pendingOps, refreshPending, startSyncLoop, syncPending, trackOps, usePendingFor, _resetPendingForTests } from '$lib/offline/pending.svelte';
 import { dismissToast, toast } from '$lib/toast.svelte';
 import * as m from '$paraglide/messages';
 import type { OpResult, StockOp } from '$lib/server/stock';
@@ -291,17 +291,46 @@ describe('synchronisation par un autre contexte', () => {
     expect(pendingCount()).toBe(0);
   });
 
-  it('geste annulé (différé) puis envoyé ailleurs → rejoué pour connaître son résultat, puis inverse', async () => {
+  it('geste annulé (différé) puis envoyé ailleurs → l’autre contexte envoie aussi l’inverse ; rien n’est renvoyé d’ici', async () => {
     const g = consume('a');
     offline();
     await sendStockOps([g]);
     await expect(undoStockOp(g)).resolves.toBe('deferred');
-    await removeQueued(['a']); // another context synced it: this tab never saw the result
-    const s = serve((o) => ({ opId: o.opId, status: 'applied', consumptionId: o.kind === 'consume' ? 3 : undefined }));
+    // Another context (the service worker, with its own modules) syncs the queue.
+    vi.resetModules();
+    const elsewhere = await import('$lib/offline/sync');
+    const other = serve((o) => ({ opId: o.opId, status: 'applied', consumptionId: o.kind === 'consume' ? 3 : undefined }));
+    await elsewhere.syncNow(1, { fetch: other.fetch as unknown as typeof fetch });
+    expect(other.batches.map((b) => b.map((o) => o.kind))).toEqual([['consume'], ['unconsume']]);
+    expect(other.batches[1][0]).toMatchObject({ consumptionId: 3 });
+
+    const s = serve();
+    invalidateAll.mockClear();
+    await syncPending(1);
+    expect(s.fetch).not.toHaveBeenCalled(); // neither replayed nor undone twice
+    expect(await listQueued(1)).toEqual([]);
+    expect(invalidateAll).toHaveBeenCalled();
+    expect(pendingOps()).toEqual([]);
+  });
+
+  it('annulation différée puis appli fermée avant le retour du réseau → l’inverse part quand même à la réouverture', async () => {
+    const g = consume('a');
+    offline();
+    await sendStockOps([g]); // attempted: maybe applied
+    await expect(undoStockOp(g)).resolves.toBe('deferred');
+    _resetPendingForTests(); // the app is closed: nothing left in memory
+    knownOffline();
+    usePendingFor(1); // reopened (startSyncLoop), still offline
+    await refreshPending(1);
+    expect(pendingOps()).toEqual([]); // still not shown
+    expect(pendingCount()).toBe(1); // but still waiting to be sent
+    backOnline();
+    const s = serve((o) => ({ opId: o.opId, status: 'applied', consumptionId: o.kind === 'consume' ? 6 : undefined }));
     await syncPending(1);
     expect(s.batches.map((b) => b.map((o) => o.kind))).toEqual([['consume'], ['unconsume']]);
-    expect(s.batches[1][0]).toMatchObject({ consumptionId: 3 });
+    expect(s.batches[1][0]).toMatchObject({ consumptionId: 6 });
     expect(await listQueued(1)).toEqual([]);
+    expect(toast.current).toBeNull(); // the undo is no news
   });
 
   it('un geste pas encore écrit dans la file n’est pas pris pour envoyé ailleurs', async () => {

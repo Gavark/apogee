@@ -2,20 +2,20 @@ import { goto } from '$app/navigation';
 import { page } from '$app/state';
 import * as m from '$paraglide/messages';
 import { newOpId } from '$lib/offline/op-id';
-import { enqueue, listQueued, removeQueued } from '$lib/offline/queue';
+import { inverseOf } from '$lib/offline/inverse';
+import { enqueue, listQueued, markUndo, removeQueued } from '$lib/offline/queue';
 import { opsHeaders, postOps, syncIdle, syncNow, withSyncLock } from '$lib/offline/sync';
 import {
   applyResults,
   claimOps,
   forgetOps,
-  inverseOf,
+  hideUndone,
   markStored,
   rememberResults,
   reload,
   requestBackgroundSync,
   resultFor,
   trackOps,
-  undoWhenSynced,
   usePendingFor
 } from '$lib/offline/pending.svelte';
 import { showToast } from '$lib/toast.svelte';
@@ -107,8 +107,9 @@ export async function sendStockOps(ops: StockOp[]): Promise<ClientOpResult[]> {
  * Cancels a gesture:
  * - queued and never attempted → removed from the queue, nothing is ever sent (`unqueued`);
  * - queued but attempted (5xx, lost reply: maybe applied) → replayed first (idempotent: the server
- *   answers with the stored result), then its inverse is sent; without network, the undo waits for
- *   the next sync (`deferred`);
+ *   answers with the stored result), then its inverse is sent; without network, the undo is recorded
+ *   on the queued gesture, and the sync that learns its result queues and sends its inverse, even
+ *   after the app was closed (`deferred`);
  * - already synced → sends the inverse built from its known result; result unknown → null.
  * Resolves with the inverse op's result in the last two cases.
  */
@@ -129,6 +130,10 @@ export async function undoStockOp(op: StockOp): Promise<ClientOpResult | 'unqueu
         await removeQueued([op.opId]); // never accepted, so never applied
         return 'unqueued' as const;
       }
+      if (res.kind === 'failed') {
+        await markUndo(op.opId); // under the lock: no sync is sending it meanwhile
+        return 'failed' as const;
+      }
       if (res.kind !== 'ok') return res.kind;
       await removeQueued([op.opId]);
       applyResults(res.results);
@@ -143,7 +148,7 @@ export async function undoStockOp(op: StockOp): Promise<ClientOpResult | 'unqueu
       throw new SessionExpiredError();
     }
     if (step === 'failed') {
-      undoWhenSynced(op);
+      hideUndone(op.opId);
       requestBackgroundSync();
       return 'deferred';
     }

@@ -5,9 +5,8 @@
 import { goto, invalidateAll } from '$app/navigation';
 import * as m from '$paraglide/messages';
 import { showToast } from '$lib/toast.svelte';
-import { newOpId } from './op-id';
-import { enqueue, listQueued } from './queue';
-import { onSyncOutcome, syncIdle, syncNow, type SyncOutcome } from './sync';
+import { listQueued } from './queue';
+import { onSyncOutcome, syncNow, type SyncOutcome } from './sync';
 import type { OpResult, StockOp } from '$lib/server/stock';
 
 const RETRY_EVERY_MS = 30_000;
@@ -19,7 +18,8 @@ const MAX_RESULTS = 200;
  * that includes it is loaded (the reload started after `gen` was assigned clears it), so the count
  * never flashes back to its old value.
  * `stored`: written to IndexedDB (a tracked op not stored yet is not "gone from the queue").
- * `hidden`: undone by the user but maybe already applied: kept queued, no longer shown.
+ * `hidden`: undone by the user but maybe already applied: kept queued (its row flagged `undo`, see
+ * queue.ts: whoever sends it queues its inverse), no longer shown.
  * Everything here belongs to one user (`owner`): another user in the tab starts from a clean slate.
  */
 type Entry = { op: StockOp; gen: number | null; stored: boolean; hidden?: boolean };
@@ -33,8 +33,6 @@ let version = 0;
 const results = new Map<string, OpResult>();
 /** Ops whose sendStockOps caller is waiting for the result and reports it itself. */
 const claimed = new Set<string>();
-/** Gestures undone while their fate was unknown: their inverse is sent once their result arrives. */
-const undoOnResult = new Map<string, StockOp>();
 /** The user the state above belongs to. */
 let owner: number | null = null;
 /** The follow-ups (queue re-read, warning, reload) of the syncs, chained in order. */
@@ -42,7 +40,7 @@ let settling: Promise<void> = Promise.resolve();
 
 /**
  * Makes `userId` the owner of the pending state. When it changes (another account logged in in this
- * tab), the previous user's entries, results and pending undos are dropped from memory: their queue
+ * tab), the previous user's entries and results are dropped from memory: their queue
  * rows stay in IndexedDB, untouched, and are never sent under the new account.
  */
 export function usePendingFor(userId: number): void {
@@ -51,7 +49,6 @@ export function usePendingFor(userId: number): void {
   version++;
   state.entries = [];
   results.clear();
-  undoOnResult.clear();
 }
 
 /** Ops to overlay on the page data (reactive). */
@@ -74,18 +71,6 @@ export function rememberResults(list: OpResult[]): void {
 
 export function resultFor(opId: string): OpResult | undefined {
   return results.get(opId);
-}
-
-/** The op that cancels `op`, given its server result; null when there is nothing (or no way) to undo. */
-export function inverseOf(op: StockOp, r: OpResult | undefined): StockOp | null {
-  if (!r || r.status === 'rejected') return null;
-  if (op.kind === 'consume' && r.consumptionId !== undefined) {
-    return { opId: newOpId(), kind: 'unconsume', consumptionId: r.consumptionId };
-  }
-  if (op.kind === 'adjust' && r.appliedQuantity) {
-    return { opId: newOpId(), kind: 'adjust', lotId: op.lotId, delta: -r.appliedQuantity };
-  }
-  return null;
 }
 
 /** Shows ops at once, before they are even stored. */
@@ -137,13 +122,12 @@ export function applyResults(list: OpResult[], droppedIds: string[] = []): void 
 }
 
 /**
- * The user undid `op` but it may already be applied (an earlier attempt got no clear answer):
- * stop showing it, keep it queued, and send its inverse once its result is known.
+ * The user undid `opId` but it may already be applied (an earlier attempt got no clear answer):
+ * its queue row now carries the undo (markUndo); stop showing it.
  */
-export function undoWhenSynced(op: StockOp): void {
-  undoOnResult.set(op.opId, op);
+export function hideUndone(opId: string): void {
   version++;
-  state.entries = state.entries.map((e) => (e.op.opId === op.opId ? { ...e, hidden: true } : e));
+  state.entries = state.entries.map((e) => (e.op.opId === opId ? { ...e, hidden: true } : e));
 }
 
 /** Reloads the page data, then drops the applied ops it now includes. */
@@ -155,9 +139,10 @@ export async function reload(): Promise<void> {
 }
 
 /**
- * Replaces the queued entries with the queue's content (applied ones stay until the next reload).
- * Stored entries gone from the queue with no result here were sent by another context (tab, service
- * worker): treated as applied. Returns them, so the caller reloads the data.
+ * Replaces the queued entries with the queue's content (applied ones stay until the next reload;
+ * rows flagged `undo` stay hidden, also after the app was closed). Stored entries gone from the
+ * queue with no result here were sent by another context (tab, service worker), which also queued
+ * the inverse of an undone one: treated as applied. Returns them, so the caller reloads the data.
  */
 export async function refreshPending(userId: number): Promise<StockOp[]> {
   for (let i = 0; i < 3; i++) {
@@ -165,19 +150,22 @@ export async function refreshPending(userId: number): Promise<StockOp[]> {
     const v = version;
     const queued = await listQueued(userId);
     if (v !== version) continue; // changed meanwhile (maybe the user): check again
-    const inQueue = new Map(queued.map((q) => [q.op.opId, q.op]));
+    const inQueue = new Map(queued.map((q) => [q.op.opId, q]));
     const vanished: StockOp[] = [];
     const kept = state.entries.flatMap((e): Entry[] => {
-      if (e.gen !== null || inQueue.has(e.op.opId)) return [e];
+      if (e.gen !== null) return [e];
+      const q = inQueue.get(e.op.opId);
+      if (q) return [q.undo ? { ...e, hidden: true } : e];
       if (!e.stored) return [e]; // being written right now
       vanished.push(e.op);
-      // An undone one stays as is: it is replayed to learn its result (see afterSync).
-      return undoOnResult.has(e.op.opId) ? [e] : [{ ...e, gen: ++gen }];
+      return [{ ...e, gen: ++gen }];
     });
     const keptIds = new Set(kept.map((e) => e.op.opId));
     state.entries = [
       ...kept,
-      ...queued.filter((q) => !keptIds.has(q.op.opId)).map((q) => ({ op: q.op, gen: null, stored: true }))
+      ...queued
+        .filter((q) => !keptIds.has(q.op.opId))
+        .map((q): Entry => ({ op: q.op, gen: null, stored: true, ...(q.undo ? { hidden: true } : {}) }))
     ];
     return vanished;
   }
@@ -202,23 +190,13 @@ function handleOutcome(userId: number, out: SyncOutcome): void {
     out.results,
     out.dropped.map((o) => o.opId)
   );
-  // Gestures undone while uncertain: now that their result is known, build their inverse.
-  const inverses: StockOp[] = [];
-  const undone = new Set<string>();
-  for (const r of out.results) {
-    const op = undoOnResult.get(r.opId);
-    if (!op) continue;
-    undoOnResult.delete(r.opId);
-    undone.add(r.opId);
-    const inv = inverseOf(op, r);
-    if (inv) inverses.push(inv);
-  }
-  for (const o of out.dropped) undoOnResult.delete(o.opId); // never applied: nothing to undo
-  // Sorted now, while the waiting callers still hold their claims. An undone gesture is no news.
+  // Sorted now, while the waiting callers still hold their claims. An undo (the undone gesture and
+  // its inverse, both handled by the sync itself) is no news: the data is just reloaded.
+  const undone = new Set(out.undone);
   const others = out.results.filter((r) => !claimed.has(r.opId) && !undone.has(r.opId));
-  const othersDropped = out.dropped.filter((o) => !claimed.has(o.opId));
+  const othersDropped = out.dropped.filter((o) => !claimed.has(o.opId) && !undone.has(o.opId));
   const changed = others.length > 0 || othersDropped.length > 0 || undone.size > 0;
-  settling = settling.then(() => afterSync(userId, others, othersDropped, inverses, changed)).catch(() => {});
+  settling = settling.then(() => afterSync(userId, others, othersDropped, changed)).catch(() => {});
 }
 
 onSyncOutcome(handleOutcome);
@@ -230,58 +208,17 @@ function swOutcome(data: unknown): { userId: number; outcome: SyncOutcome } | nu
   const o = d.outcome;
   if (d.type !== 'sync-outcome' || typeof d.userId !== 'number' || !o) return null;
   if (!Array.isArray(o.results) || !Array.isArray(o.dropped) || typeof o.status !== 'string') return null;
-  return { userId: d.userId, outcome: o as SyncOutcome };
+  // `undone` is missing from a service worker of an older version.
+  return { userId: d.userId, outcome: { ...(o as SyncOutcome), undone: Array.isArray(o.undone) ? o.undone : [] } };
 }
 
 /**
- * Queues and sends ops on the user's behalf: inverses of gestures undone while uncertain, or such
- * a gesture replayed (idempotent) to learn its result. They stay queued if the network fails again.
+ * Re-reads the queue; for ops nobody is waiting on, warns about failures; reloads the data when
+ * something changed out of a caller's sight.
  */
-async function sendQuietly(userId: number, ops: StockOp[]): Promise<StockOp[]> {
-  if (userId !== owner) return []; // only ever on behalf of the user the ops belong to
-  const release = claimOps(ops); // reported by the reload below, not by a warning
-  try {
-    trackOps(ops);
-    const added: StockOp[] = [];
-    for (const op of ops) if (await enqueue(userId, op)) added.push(op);
-    markStored(ops.map((o) => o.opId));
-    if (added.length > 0) {
-      await syncIdle(); // the sync that brought the results may still hold the lock
-      await syncNow(userId);
-    }
-    return added;
-  } finally {
-    release();
-  }
-}
-
-/**
- * Sends pending inverses, re-reads the queue; for ops nobody is waiting on, warns about failures;
- * reloads the data when something changed out of a caller's sight.
- */
-async function afterSync(
-  userId: number,
-  others: OpResult[],
-  othersDropped: StockOp[],
-  inverses: StockOp[],
-  changed: boolean
-): Promise<void> {
+async function afterSync(userId: number, others: OpResult[], othersDropped: StockOp[], changed: boolean): Promise<void> {
   if (userId !== owner) return; // the user changed since: nothing of theirs on screen any more
-  if (inverses.length > 0) await sendQuietly(userId, inverses).catch(() => {});
   const vanished = await refreshPending(userId).catch((): StockOp[] => []);
-  // An undone gesture sent by another context: its result is unknown here, replay it to get it.
-  const replay = vanished.filter((op) => undoOnResult.has(op.opId));
-  if (replay.length > 0) {
-    const added = new Set((await sendQuietly(userId, replay).catch((): StockOp[] => [])).map((o) => o.opId));
-    // Not re-queued (its opId is held by another row, or the user changed): its result cannot be
-    // learnt from here. Give up on that undo rather than replay forever; the reload shows the truth.
-    const lost = replay.filter((o) => !added.has(o.opId)).map((o) => o.opId);
-    if (lost.length > 0) {
-      for (const id of lost) undoOnResult.delete(id);
-      version++;
-      state.entries = state.entries.map((e) => (lost.includes(e.op.opId) && e.gen === null ? { ...e, gen: ++gen } : e));
-    }
-  }
   if (!changed && vanished.length === 0) return;
   const emptied = others.some((r) => r.status === 'partial' || (r.status === 'rejected' && r.reason === 'empty_lot'));
   const failed = othersDropped.length > 0 || others.some((r) => r.status === 'rejected' && r.reason !== 'empty_lot');
@@ -346,7 +283,6 @@ export function _resetPendingForTests(): void {
   state.entries = [];
   results.clear();
   claimed.clear();
-  undoOnResult.clear();
   gen = 0;
   version++;
 }

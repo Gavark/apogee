@@ -1,5 +1,6 @@
 // Sends the offline queue to the server. Framework-free (no $app/*, no runes): the service worker imports it.
-import { bumpAttempts, listQueued, removeQueued } from './queue';
+import { inverseOf } from './inverse';
+import { bumpAttempts, listQueued, removeQueued, type QueuedInverse, type QueuedOp } from './queue';
 import type { OpResult, StockOp } from '$lib/stock-ops';
 
 /** Same value as MAX_OPS_PER_REQUEST on the server (a $lib/server module cannot be bundled here). */
@@ -10,7 +11,11 @@ const REQUEST_TIMEOUT_MS = 15_000;
 const LOCK_NAME = 'apogee-sync';
 
 export type SyncStatus = 'ok' | 'offline' | 'retry' | 'unauthorized' | 'idle' | 'busy';
-export type SyncOutcome = { sent: number; results: OpResult[]; dropped: StockOp[]; status: SyncStatus };
+/**
+ * `undone`: opIds among `results` and `dropped` sent for an undo (undone gestures and their
+ * inverses): no news for the user, who asked for it.
+ */
+export type SyncOutcome = { sent: number; results: OpResult[]; dropped: StockOp[]; undone: string[]; status: SyncStatus };
 export type SyncListener = (userId: number, outcome: SyncOutcome) => void;
 
 const listeners = new Set<SyncListener>();
@@ -103,24 +108,41 @@ export async function postOps(ops: StockOp[], userId: number, doFetch: typeof fe
   return { kind: 'failed' };
 }
 
+/** At most this many passes over the queue per sync: the inverses queued by one pass go in the next. */
+const MAX_PASSES = 3;
+
 async function run(userId: number, doFetch: typeof fetch): Promise<SyncOutcome> {
-  const out: SyncOutcome = { sent: 0, results: [], dropped: [], status: 'ok' };
-  const queued = await listQueued(userId);
+  const out: SyncOutcome = { sent: 0, results: [], dropped: [], undone: [], status: 'ok' };
+  let queued = await listQueued(userId);
   if (queued.length === 0) return { ...out, status: 'idle' };
   if (typeof navigator !== 'undefined' && navigator.onLine === false) return { ...out, status: 'offline' };
 
+  for (let pass = 0; pass < MAX_PASSES && queued.length > 0; pass++) {
+    const inversesQueued = await sendQueued(queued, userId, doFetch, out);
+    if (out.status !== 'ok' || inversesQueued === 0) break;
+    queued = await listQueued(userId); // the inverses just queued go in this same sync
+  }
+  return out;
+}
+
+/** One pass over `queued`, in batches, filling `out`. Returns how many inverses it queued. */
+async function sendQueued(queued: QueuedOp[], userId: number, doFetch: typeof fetch, out: SyncOutcome): Promise<number> {
+  let inversesQueued = 0;
   for (let i = 0; i < queued.length; i += SYNC_BATCH_SIZE) {
-    const ops = queued.slice(i, i + SYNC_BATCH_SIZE).map((q) => q.op);
+    const rows = queued.slice(i, i + SYNC_BATCH_SIZE);
+    const ops = rows.map((q) => q.op);
     const ids = ops.map((o) => o.opId);
+    const forUndo = rows.filter((q) => q.undo || q.inverseOf !== undefined).map((q) => q.op.opId);
     const res = await postOps(ops, userId, doFetch);
     if (res.kind === 'unauthorized') {
       out.status = 'unauthorized'; // nothing removed, no attempt counted: sent again once logged back in as this user
       break;
     }
     if (res.kind === 'invalid') {
-      // Never accepted, so never applied: keep it from blocking the queue.
+      // Never accepted, so never applied: keep it from blocking the queue. Nothing to undo either.
       await removeQueued(ids);
       out.dropped.push(...ops);
+      out.undone.push(...forUndo);
       continue;
     }
     if (res.kind === 'failed') {
@@ -128,11 +150,20 @@ async function run(userId: number, doFetch: typeof fetch): Promise<SyncOutcome> 
       out.status = 'retry';
       break;
     }
-    await removeQueued(ids);
+    // An undone gesture's result is known: its inverse is queued in the same transaction as its removal.
+    const byId = new Map(res.results.map((r) => [r.opId, r]));
+    const inverses: QueuedInverse[] = [];
+    for (const q of rows) {
+      const inv = q.undo ? inverseOf(q.op, byId.get(q.op.opId)) : null;
+      if (inv) inverses.push({ userId, op: inv, inverseOf: q.op.opId });
+    }
+    await removeQueued(ids, inverses);
+    inversesQueued += inverses.length;
     out.sent += ops.length;
     out.results.push(...res.results);
+    out.undone.push(...forUndo);
   }
-  return out;
+  return inversesQueued;
 }
 
 /**
@@ -153,5 +184,5 @@ export async function syncNow(userId: number, deps: { fetch?: typeof fetch } = {
     }
     return outcome;
   }, false);
-  return out ?? { sent: 0, results: [], dropped: [], status: 'busy' };
+  return out ?? { sent: 0, results: [], dropped: [], undone: [], status: 'busy' };
 }

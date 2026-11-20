@@ -1,7 +1,7 @@
 import 'fake-indexeddb/auto';
 import { IDBFactory } from 'fake-indexeddb';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { enqueue, listQueued, _resetForTests } from '$lib/offline/queue';
+import { enqueue, listQueued, markUndo, _resetForTests } from '$lib/offline/queue';
 import { syncNow } from '$lib/offline/sync';
 import type { OpResult, StockOp } from '$lib/server/stock';
 
@@ -201,5 +201,97 @@ describe('syncNow', () => {
     const q = await listQueued(1);
     expect(q.map((x) => x.op.opId)).toEqual(['op-100']);
     expect(q[0].attempts).toBe(1);
+  });
+});
+
+describe('annulation différée (geste marqué undo dans la file)', () => {
+  /** Answers like the server: consume → consumptionId 42, adjust → its delta, unconsume → applied. */
+  const realistic = (ops: StockOp[]) =>
+    ok(
+      ops.map((o): OpResult => {
+        if (o.kind === 'consume') return { opId: o.opId, status: 'applied', consumptionId: 42 };
+        if (o.kind === 'adjust') return { opId: o.opId, status: 'applied', appliedQuantity: o.delta };
+        return { opId: o.opId, status: 'applied' };
+      })
+    );
+
+  it('markUndo marque la ligne (false si le geste n’est plus en file)', async () => {
+    await enqueue(1, consume('a'));
+    await expect(markUndo('a')).resolves.toBe(true);
+    await expect(markUndo('absent')).resolves.toBe(false);
+    expect((await listQueued(1))[0]).toMatchObject({ op: { opId: 'a' }, undo: true });
+  });
+
+  it('résultat connu → l’inverse (unconsume du consumptionId obtenu) est mis en file et envoyé dans la même synchronisation', async () => {
+    await enqueue(1, consume('a'));
+    await markUndo('a');
+    const s = server(realistic);
+    const out = await syncNow(1, { fetch: s.fetch });
+    expect(out.status).toBe('ok');
+    expect(s.batches.map((b) => b.map((o) => o.kind))).toEqual([['consume'], ['unconsume']]);
+    expect(s.batches[1][0]).toMatchObject({ kind: 'unconsume', consumptionId: 42 });
+    expect(out.undone).toEqual(['a', s.batches[1][0].opId]);
+    expect(out.results.map((r) => r.opId)).toEqual(['a', s.batches[1][0].opId]);
+    expect(await listQueued(1)).toEqual([]);
+  });
+
+  it('l’inverse reste en file si son envoi échoue, et part à la synchronisation suivante', async () => {
+    await enqueue(1, consume('a'));
+    await markUndo('a');
+    let n = 0;
+    const s = server((ops) => (n++ === 0 ? realistic(ops) : new Response('{}', { status: 503 })));
+    const out = await syncNow(1, { fetch: s.fetch });
+    expect(out.status).toBe('retry');
+    const q = await listQueued(1);
+    expect(q).toHaveLength(1);
+    expect(q[0]).toMatchObject({ op: { kind: 'unconsume', consumptionId: 42 }, inverseOf: 'a', attempts: 1 });
+    expect(q[0].undo).toBeUndefined();
+
+    const s2 = server(realistic);
+    const again = await syncNow(1, { fetch: s2.fetch });
+    expect(s2.batches).toEqual([[q[0].op]]);
+    expect(again.undone).toEqual([q[0].op.opId]); // still an undo: no news for the user
+    expect(await listQueued(1)).toEqual([]);
+  });
+
+  it('ajustement → inverse de la quantité réellement appliquée', async () => {
+    await enqueue(1, { opId: 'a', kind: 'adjust', lotId: 3, delta: -2 });
+    await markUndo('a');
+    const s = server((ops) =>
+      ok(ops.map((o) => ({ opId: o.opId, status: 'partial' as const, appliedQuantity: o.kind === 'adjust' && o.lotId === 3 && o.delta < 0 ? -1 : 1 })))
+    );
+    await syncNow(1, { fetch: s.fetch });
+    expect(s.batches[1]).toEqual([expect.objectContaining({ kind: 'adjust', lotId: 3, delta: 1 })]);
+  });
+
+  it('geste refusé (rejected) ou rejeté (400) → aucun inverse', async () => {
+    await enqueue(1, consume('a'));
+    await markUndo('a');
+    const s = server((ops) => ok(ops.map((o) => ({ opId: o.opId, status: 'rejected' as const, reason: 'empty_lot' as const }))));
+    const out = await syncNow(1, { fetch: s.fetch });
+    expect(s.batches).toHaveLength(1);
+    expect(out.undone).toEqual(['a']);
+    expect(await listQueued(1)).toEqual([]);
+
+    await enqueue(1, consume('b'));
+    await markUndo('b');
+    const s400 = server(() => new Response('{"error":"invalid"}', { status: 400 }));
+    const dropped = await syncNow(1, { fetch: s400.fetch });
+    expect(s400.batches).toHaveLength(1);
+    expect(dropped.undone).toEqual(['b']);
+    expect(await listQueued(1)).toEqual([]);
+  });
+
+  it('le marquage survit à la fermeture de l’appli (nouvel état des modules) : l’inverse part quand même', async () => {
+    await enqueue(1, consume('a'));
+    await markUndo('a');
+    // App closed, then reopened (or the service worker wakes up): fresh modules, same IndexedDB.
+    _resetForTests();
+    vi.resetModules();
+    const fresh = await import('$lib/offline/sync');
+    const s = server(realistic);
+    await fresh.syncNow(1, { fetch: s.fetch });
+    expect(s.batches.map((b) => b.map((o) => o.kind))).toEqual([['consume'], ['unconsume']]);
+    expect(s.batches[1][0]).toMatchObject({ consumptionId: 42 });
   });
 });
