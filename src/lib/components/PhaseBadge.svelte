@@ -9,8 +9,7 @@
   import WarningCircle from 'phosphor-svelte/lib/WarningCircle';
   import * as m from '$paraglide/messages';
 
-  // Local until Task 7 exports it from $lib/phase.
-  type Phase = 'unknown' | 'too_young' | 'ready' | 'peak' | 'last_call' | 'past';
+  import type { Phase } from '$lib/phase';
 
   let { phase }: { phase: Phase } = $props();
 
