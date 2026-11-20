@@ -1,0 +1,138 @@
+/*
+ * Shared component classes. Plain forms can use them directly (a submit
+ * button is just `<button class="btn btn-primary">`); the Svelte components
+ * in $lib/components apply the same classes.
+ */
+
+/* === Buttons === */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--s-2);
+  min-height: var(--tap);
+  padding: 0 var(--s-5);
+  border-radius: var(--r-control);
+  border: 1.5px solid transparent;
+  font-size: var(--fs-base);
+  font-weight: var(--fw-semibold);
+  line-height: 1;
+  white-space: nowrap;
+  text-decoration: none;
+  cursor: pointer;
+  transition:
+    background-color var(--dur-fast) var(--ease-out),
+    border-color var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out),
+    transform var(--dur-fast) var(--ease-out);
+}
+.btn:hover { text-decoration: none; }
+.btn:active:not(:disabled) { transform: scale(0.98); }
+.btn:disabled,
+.btn[aria-disabled='true'] { opacity: 0.45; cursor: not-allowed; }
+
+.btn-primary { background: var(--c-fill); color: var(--c-on-fill); }
+.btn-primary:hover:not(:disabled) { background: var(--c-fill-hover); }
+
+.btn-secondary {
+  background: transparent;
+  color: var(--c-link);
+  border-color: var(--c-border-strong);
+}
+.btn-secondary:hover:not(:disabled) { background: var(--c-bg-sunken); }
+
+.btn-ghost { background: transparent; color: var(--c-text); }
+.btn-ghost:hover:not(:disabled) { background: var(--c-bg-sunken); }
+
+.btn-danger { background: var(--c-danger); color: var(--c-on-fill); }
+.btn-danger:hover:not(:disabled) { filter: brightness(0.94); }
+
+.btn-sm {
+  min-height: 40px;
+  padding: 0 var(--s-4);
+  font-size: var(--fs-sm);
+}
+.btn-block { width: 100%; }
+
+/* === Card === */
+.card {
+  background: var(--c-bg-card);
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-card);
+  padding: var(--s-4);
+  box-shadow: var(--shadow-sm);
+}
+
+/* === Form fields: label above, hint and error below === */
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+}
+.field-label {
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-semibold);
+  color: var(--c-text);
+}
+.field-input {
+  width: 100%;
+  min-height: var(--tap);
+  padding: var(--s-3) var(--s-4);
+  border-radius: var(--r-control);
+  border: 1.5px solid var(--c-border-strong);
+  background: var(--c-bg-card);
+  color: var(--c-text);
+  font-size: var(--fs-base);
+  transition: border-color var(--dur-fast) var(--ease-out);
+}
+.field-input::placeholder { color: var(--c-text-muted); }
+.field-input:focus { border-color: var(--c-accent); }
+.field-input[aria-invalid='true'] { border-color: var(--c-danger); }
+select.field-input {
+  appearance: none;
+  padding-right: var(--s-8);
+  /* Chevron drawn from two gradients so it follows the theme colours */
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--c-text-muted) 50%),
+    linear-gradient(135deg, var(--c-text-muted) 50%, transparent 50%);
+  background-position:
+    right 22px center,
+    right 16px center;
+  background-size: 6px 6px;
+  background-repeat: no-repeat;
+}
+textarea.field-input { min-height: 96px; resize: vertical; }
+.field-hint {
+  margin: 0;
+  font-size: var(--fs-sm);
+  color: var(--c-text-muted);
+}
+.field-error {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--s-1);
+  margin: 0;
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-medium);
+  color: var(--c-danger);
+}
+
+/* === Phase badge === */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 26px;
+  padding: 3px 10px 3px 8px;
+  border-radius: var(--r-pill);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-semibold);
+  line-height: 1.2;
+  white-space: nowrap;
+}
+.badge-unknown { background: var(--c-phase-unknown-bg); color: var(--c-phase-unknown-fg); }
+.badge-too_young { background: var(--c-phase-too-young-bg); color: var(--c-phase-too-young-fg); }
+.badge-ready { background: var(--c-phase-ready-bg); color: var(--c-phase-ready-fg); }
+.badge-peak { background: var(--c-phase-peak-bg); color: var(--c-phase-peak-fg); }
+.badge-last_call { background: var(--c-phase-last-call-bg); color: var(--c-phase-last-call-fg); }
+.badge-past { background: var(--c-phase-past-bg); color: var(--c-phase-past-fg); }
