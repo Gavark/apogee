@@ -4,27 +4,27 @@
   import * as m from '$paraglide/messages';
   import Button from '$lib/components/Button.svelte';
   import { showToast } from '$lib/toast.svelte';
+  import { pushSupportState } from '$lib/push-support';
 
   /** Called after this device was subscribed and registered server-side. */
   let { onchange }: { onchange?: () => void } = $props();
 
-  type PushState = 'checking' | 'idle' | 'subscribing' | 'active' | 'denied' | 'unsupported';
+  type PushState = 'checking' | 'idle' | 'subscribing' | 'active' | 'denied' | 'unsupported' | 'ios-install';
   let pushState = $state<PushState>('checking');
-  let isStandalone = $state(false);
-  let isIOS = $state(false);
 
   onMount(async () => {
-    isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent);
-    isStandalone =
-      (navigator as Navigator & { standalone?: boolean }).standalone === true ||
-      window.matchMedia('(display-mode: standalone)').matches;
-
-    if (!('serviceWorker' in navigator) || !('PushManager' in window) || !('Notification' in window)) {
-      pushState = 'unsupported';
-      return;
-    }
-    if (Notification.permission === 'denied') {
-      pushState = 'denied';
+    const support = pushSupportState({
+      ua: navigator.userAgent,
+      maxTouchPoints: navigator.maxTouchPoints ?? 0,
+      standalone:
+        (navigator as Navigator & { standalone?: boolean }).standalone === true ||
+        window.matchMedia('(display-mode: standalone)').matches,
+      hasPushManager: 'serviceWorker' in navigator && 'PushManager' in window,
+      hasNotification: 'Notification' in window,
+      permission: 'Notification' in window ? Notification.permission : 'unavailable'
+    });
+    if (support !== 'ready') {
+      pushState = support;
       return;
     }
     try {
@@ -81,14 +81,14 @@
 
 {#if pushState === 'checking'}
   <!-- silent, avoids flicker -->
+{:else if pushState === 'ios-install'}
+  <p class="hint">{m.notif_btn_ios_hint()}</p>
 {:else if pushState === 'unsupported'}
   <p class="hint">{m.notif_btn_unsupported()}</p>
 {:else if pushState === 'denied'}
   <p class="hint">{m.notif_btn_denied()}</p>
 {:else if pushState === 'active'}
   <p class="ok"><Bell size={18} weight="fill" aria-hidden="true" /> {m.notif_btn_active()}</p>
-{:else if isIOS && !isStandalone}
-  <p class="hint">{m.notif_btn_ios_hint()}</p>
 {:else}
   <Button variant="primary" onclick={enable} disabled={pushState === 'subscribing'}>
     <Bell size={18} aria-hidden="true" />
