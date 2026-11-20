@@ -3,7 +3,7 @@ import type * as schema from '$lib/server/db/schema';
 import { NotFoundError, type HouseholdCtx } from '$lib/server/context';
 import { analyzeAndStore } from '$lib/server/label-analyses';
 import { MAX_PHOTO_BYTES } from '$lib/server/photos';
-import { getWineDetail } from '$lib/server/wines';
+import { findOwnedWine } from '$lib/server/wines';
 import type { AiProvider, LabelHints } from '$lib/server/ai/types';
 
 type DB = BaseSQLiteDatabase<'sync', unknown, typeof schema>;
@@ -68,7 +68,7 @@ export async function handleAnalyze(
   if (typeof wineIdRaw === 'string' && wineIdRaw !== '') {
     if (!/^\d+$/.test(wineIdRaw)) return bad;
     try {
-      const { wine } = getWineDetail(db, ctx, Number(wineIdRaw), env.currentYear);
+      const wine = findOwnedWine(db, ctx, Number(wineIdRaw));
       existingPhotoPath = wine.labelPhoto;
       hints = {
         producer: wine.producer,

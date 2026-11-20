@@ -4,7 +4,8 @@
   import { colorLabel, wineTitle } from '$lib/wine-labels';
   import type { CellarRow } from '$lib/server/wines';
 
-  let { row }: { row: CellarRow } = $props();
+  /** `onestimate` adds the "estimate with AI" button to wines without a window. */
+  let { row, onestimate }: { row: CellarRow; onestimate?: (row: CellarRow) => void } = $props();
 
   const wine = $derived(row.wine);
   // In-flight "Bue" taps: the count drops at once, before the server answers.
@@ -39,7 +40,10 @@
     {#if windowText}<span class="window">{windowText}</span>{/if}
   </a>
   {#if row.phase === 'unknown'}
-    <a class="set-window" href="/app/wines/{wine.id}/edit">{m.home_set_window()}</a>
+    <div class="set-window">
+      <a href="/app/wines/{wine.id}/edit">{m.home_set_window()}</a>
+      {#if onestimate}<button type="button" onclick={() => onestimate(row)}>{m.wine_ai_estimate()}</button>{/if}
+    </div>
   {/if}
   {#if row.bottles > 0}
     <div class="drink"><DrinkButton {row} onpending={(d) => (pending += d)} /></div>
@@ -73,9 +77,20 @@
   .drink { grid-column: 2; grid-row: 1; }
   .set-window {
     grid-column: 1 / -1;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0 var(--s-4);
+  }
+  .set-window a,
+  .set-window button {
     min-height: var(--tap);
     display: inline-flex;
     align-items: center;
+    padding: 0;
+    border: 0;
+    background: none;
+    font: inherit;
+    cursor: pointer;
     color: var(--c-accent);
     font-size: var(--fs-sm);
     font-weight: var(--fw-semibold);

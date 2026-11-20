@@ -19,6 +19,23 @@ export const FORMAT_OPTIONS: { value: number; label: () => string }[] = [
   { value: 600, label: m.format_600 }
 ];
 
+const AI_ERRORS: Record<string, () => string> = {
+  unavailable: m.add_ai_error_unavailable,
+  limit_reached: m.add_ai_error_limit,
+  not_configured: m.add_ai_error_not_configured,
+  refused: m.add_ai_error_refused,
+  auth: m.add_ai_error_auth,
+  rate_limited: m.add_ai_error_rate_limited,
+  invalid_response: m.add_ai_error_invalid_response,
+  invalid_photo: m.add_ai_error_invalid_photo
+};
+
+/** The user-facing message for a failed analysis outcome (unknown codes read as "unavailable"). */
+export const aiErrorMessage = (code: string): string => (AI_ERRORS[code] ?? m.add_ai_error_unavailable)();
+
+export const confidenceLabel = (c: string | null): string =>
+  c === 'high' ? m.add_ai_confidence_high() : c === 'medium' ? m.add_ai_confidence_medium() : m.add_ai_confidence_low();
+
 export const colorLabel = (c: string | null): string | null =>
   COLOR_OPTIONS.find((o) => o.value === c)?.label() ?? null;
 

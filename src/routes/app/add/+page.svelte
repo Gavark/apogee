@@ -10,6 +10,7 @@
   import Field from '$lib/components/Field.svelte';
   import WineForm from '$lib/components/WineForm.svelte';
   import LabelCapture from '$lib/components/LabelCapture.svelte';
+  import { aiErrorMessage } from '$lib/wine-labels';
   import type { AnalysisOutcome } from '$lib/server/label-analyses';
 
   let { data, form } = $props();
@@ -27,17 +28,6 @@
   let captured = $state<{ analysisId: number | null; preview: string; outcome: AnalysisOutcome } | null>(null);
   let captureError = $state<string | null>(null);
 
-  const ERRORS: Record<string, () => string> = {
-    unavailable: m.add_ai_error_unavailable,
-    limit_reached: m.add_ai_error_limit,
-    not_configured: m.add_ai_error_not_configured,
-    refused: m.add_ai_error_refused,
-    auth: m.add_ai_error_auth,
-    rate_limited: m.add_ai_error_rate_limited,
-    invalid_response: m.add_ai_error_invalid_response,
-    invalid_photo: m.add_ai_error_invalid_photo
-  };
-
   const analysis = $derived(captured?.outcome.ok ? captured.outcome.analysis : null);
   const label = $derived(analysis?.isWineLabel ? analysis : null);
   const notice = $derived.by(() => {
@@ -45,7 +35,7 @@
     if (!o) return null;
     if (o.ok) return o.analysis.isWineLabel ? null : m.add_ai_not_label();
     // Without a configured provider the photo is simply attached: nothing to apologise for.
-    return data.aiEnabled ? (ERRORS[o.error]?.() ?? m.add_ai_error_unavailable()) : null;
+    return data.aiEnabled ? aiErrorMessage(o.error) : null;
   });
 
   const str = (x: string | number | null | undefined) => (x === null || x === undefined ? '' : String(x));

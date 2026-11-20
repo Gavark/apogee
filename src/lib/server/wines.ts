@@ -3,6 +3,7 @@ import type { BaseSQLiteDatabase } from 'drizzle-orm/sqlite-core';
 import * as schema from './db/schema';
 import { NotFoundError, type HouseholdCtx } from './context';
 import type { Wine } from './db/schema';
+import { getOwnedAnalysis } from './label-analyses';
 import { cleanupQuietly, deletePhoto, photosDir } from './photos';
 import type { AiConfidence } from './ai/types';
 import {
@@ -130,7 +131,7 @@ function assertQuantity(quantity: number): void {
     throw new RangeError(`quantity must be an integer between 1 and ${MAX_LOT_QUANTITY}`);
 }
 
-function findOwnedWine(db: DB, ctx: HouseholdCtx, wineId: number): Wine {
+export function findOwnedWine(db: DB, ctx: HouseholdCtx, wineId: number): Wine {
   const row = db
     .select()
     .from(wines)
@@ -292,6 +293,36 @@ export function updateWine(db: DB, ctx: HouseholdCtx, wineId: number, input: Win
   });
 }
 
+/** Applies an analysis' proposed window to a wine as the AI's own; identity and stock are untouched. */
+export function applyAiWindow(db: DB, ctx: HouseholdCtx, wineId: number, analysisId: number): void {
+  db.transaction((tx) => {
+    const wine = findOwnedWine(tx, ctx, wineId);
+    const found = getOwnedAnalysis(tx, ctx, analysisId);
+    const proposed = found.analysis?.window;
+    if (!proposed || !hasYears(proposed)) throw new RangeError('analysis has no window');
+    const check = validateWindow(proposed, wine.vintage ?? wine.acquiredYear);
+    if (check) throw new RangeError(`analysis window is not valid: ${check.reason}`);
+    const now = Math.floor(Date.now() / 1000);
+    tx.update(wines)
+      .set({
+        drinkFrom: proposed.drinkFrom,
+        peakFrom: proposed.peakFrom,
+        peakTo: proposed.peakTo,
+        drinkUntil: proposed.drinkUntil,
+        windowSource: 'ai',
+        aiConfidence: found.analysis!.confidence,
+        aiRationale: found.analysis!.rationale,
+        aiModel: found.model,
+        aiAnalyzedAt: now,
+        // Never replaces a photo the wine already has.
+        ...(found.photoPath && !wine.labelPhoto ? { labelPhoto: found.photoPath } : {}),
+        updatedAt: now
+      })
+      .where(and(eq(wines.id, wineId), eq(wines.householdId, ctx.householdId)))
+      .run();
+  });
+}
+
 export function deleteWine(
   db: DB,
   ctx: HouseholdCtx,
@@ -319,7 +350,9 @@ export type CellarLot = {
   position: string;
   quantity: number;
 };
-export type CellarRow = { wine: Wine; phase: Phase; bottles: number; lots: CellarLot[] };
+/** The photo path stays on the server: the browser only learns whether there is one (`hasPhoto`). */
+export type PublicWine = Omit<Wine, 'labelPhoto'>;
+export type CellarRow = { wine: PublicWine; phase: Phase; bottles: number; lots: CellarLot[] };
 export type CellarFilter = {
   q?: string;
   locationId?: number;
@@ -328,7 +361,7 @@ export type CellarFilter = {
   finished?: boolean;
 };
 
-function windowOf(w: Wine): WindowYears {
+function windowOf(w: PublicWine): WindowYears {
   return { drinkFrom: w.drinkFrom, peakFrom: w.peakFrom, peakTo: w.peakTo, drinkUntil: w.drinkUntil };
 }
 
@@ -357,7 +390,8 @@ function loadLots(db: DB, wineIds: number[]): Map<number, CellarLot[]> {
   return byWine;
 }
 
-function toRow(wine: Wine, lots: CellarLot[], year: number): CellarRow {
+function toRow(full: Wine, lots: CellarLot[], year: number): CellarRow {
+  const { labelPhoto: _photo, ...wine } = full;
   return {
     wine,
     phase: computePhase(windowOf(wine), year),
@@ -426,6 +460,7 @@ export function homeSections(rows: CellarRow[]): { phase: Phase; rows: CellarRow
 }
 
 export type WineDetail = CellarRow & {
+  hasPhoto: boolean;
   consumptions: {
     id: number;
     consumedOn: string;
@@ -454,5 +489,5 @@ export function getWineDetail(db: DB, ctx: HouseholdCtx, wineId: number, year: n
     .where(eq(consumptions.wineId, wineId))
     .orderBy(desc(consumptions.consumedOn), desc(consumptions.id))
     .all();
-  return { ...toRow(wine, lots, year), consumptions: history };
+  return { ...toRow(wine, lots, year), hasPhoto: wine.labelPhoto !== null, consumptions: history };
 }
