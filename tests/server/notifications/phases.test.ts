@@ -8,7 +8,7 @@ import {
   scanHouseholdPhases,
   householdReferenceTimeZone
 } from '../../../src/lib/server/notifications/phases';
-import { createWine, updateWine, applyAiWindow, type WineInput } from '../../../src/lib/server/wines';
+import { createWine, updateWine, applyAiWindow, addStock, type WineInput } from '../../../src/lib/server/wines';
 import { currentYear } from '../../../src/lib/phase';
 import type { HouseholdCtx } from '../../../src/lib/server/context';
 
@@ -58,6 +58,23 @@ beforeEach(() => {
 });
 
 describe('phases', () => {
+  it('addStock sur un vin a 0 bouteille : phase courante marquee silencieuse, rien a annoncer', () => {
+    const y = currentYear('Europe/Paris');
+    const id = insertWine(win(y - 2, null, null, y + 5), 0, 'Vide');
+    scanHouseholdPhases(tdb.db, hh, y, '2020-01-01', NOW);
+    addStock(tdb.db, ctx, id, { locationId: loc, position: '', quantity: 2 });
+    expect(log(id)).toMatchObject([{ phase: 'ready', silent: 1 }]);
+    scanHouseholdPhases(tdb.db, hh, y, '2020-01-02', NOW + 10);
+    expect(log(id).filter((l) => l.silent === 0)).toHaveLength(0);
+  });
+
+  it('addStock sur un vin deja en stock : pas de marquage', () => {
+    const y = currentYear('Europe/Paris');
+    const id = insertWine(win(y - 2, null, null, y + 5), 1, 'Plein');
+    addStock(tdb.db, ctx, id, { locationId: loc, position: 'B', quantity: 1 });
+    expect(log(id)).toHaveLength(0);
+  });
+
   it('NOTIFIED_PHASES', () => expect([...NOTIFIED_PHASES]).toEqual(['ready', 'peak', 'last_call', 'past']));
 
   it("premier scan d'un foyer : tout est silencieux, aucun événement", () => {

@@ -468,5 +468,80 @@
   "admin_ai_test_err_rate_limited": "Fournisseur saturé ou quota atteint : réessayez plus tard.",
   "admin_ai_test_err_refused": "Le fournisseur a refusé la requête.",
   "admin_ai_test_err_invalid_response": "Réponse du fournisseur inexploitable : vérifiez le modèle.",
-  "admin_ai_test_err_unavailable": "Fournisseur injoignable : vérifiez l'adresse, le modèle et le réseau."
+  "admin_ai_test_err_unavailable": "Fournisseur injoignable : vérifiez l'adresse, le modèle et le réseau.",
+  "notif_digest_ready": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} vin est prêt à boire",
+        "countPlural=*": "{count} vins sont prêts à boire"
+      }
+    }
+  ],
+  "notif_digest_peak": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} vin entre à son apogée",
+        "countPlural=*": "{count} vins entrent à leur apogée"
+      }
+    }
+  ],
+  "notif_digest_last_call": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} vin est à boire vite",
+        "countPlural=*": "{count} vins sont à boire vite"
+      }
+    }
+  ],
+  "notif_digest_past": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} vin a passé son apogée",
+        "countPlural=*": "{count} vins ont passé leur apogée"
+      }
+    }
+  ],
+  "notif_digest_monthly": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Ce mois-ci, {count} bouteille à ne pas oublier : {names}",
+        "countPlural=*": "Ce mois-ci, {count} bouteilles à ne pas oublier : {names}"
+      }
+    }
+  ]
 }

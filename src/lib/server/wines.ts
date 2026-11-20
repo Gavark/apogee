@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, inArray } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, sql } from 'drizzle-orm';
 import type { BaseSQLiteDatabase } from 'drizzle-orm/sqlite-core';
 import * as schema from './db/schema';
 import { NotFoundError, type HouseholdCtx } from './context';
@@ -264,6 +264,13 @@ export function createWine(
   });
 }
 
+const totalBottles = (db: DB, wineId: number): number =>
+  db
+    .select({ n: sql<number>`coalesce(sum(${stockLots.quantity}), 0)` })
+    .from(stockLots)
+    .where(eq(stockLots.wineId, wineId))
+    .get()!.n;
+
 /** `photoPath` is attached only when the wine has no photo yet. */
 export function addStock(
   db: DB,
@@ -281,7 +288,11 @@ export function addStock(
         .set({ labelPhoto: photoPath })
         .where(and(eq(wines.id, wineId), eq(wines.householdId, ctx.householdId)))
         .run();
-    return { lotId: upsertLot(tx, wineId, lot) };
+    // Restocking a finished wine must not announce the phase it is already in.
+    const wasEmpty = totalBottles(tx, wineId) === 0;
+    const lotId = upsertLot(tx, wineId, lot);
+    if (wasEmpty) markCurrentPhaseSilently(tx, wineId, wineYear(tx, ctx));
+    return { lotId };
   });
 }
 

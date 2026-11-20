@@ -468,5 +468,80 @@
   "admin_ai_test_err_rate_limited": "Provider busy or quota reached: try again later.",
   "admin_ai_test_err_refused": "The provider refused the request.",
   "admin_ai_test_err_invalid_response": "Unusable response from the provider: check the model.",
-  "admin_ai_test_err_unavailable": "Provider unreachable: check the address, the model and the network."
+  "admin_ai_test_err_unavailable": "Provider unreachable: check the address, the model and the network.",
+  "notif_digest_ready": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} wine is ready to drink",
+        "countPlural=*": "{count} wines are ready to drink"
+      }
+    }
+  ],
+  "notif_digest_peak": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} wine is reaching its peak",
+        "countPlural=*": "{count} wines are reaching their peak"
+      }
+    }
+  ],
+  "notif_digest_last_call": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} wine should be drunk soon",
+        "countPlural=*": "{count} wines should be drunk soon"
+      }
+    }
+  ],
+  "notif_digest_past": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} wine is past its peak",
+        "countPlural=*": "{count} wines are past their peak"
+      }
+    }
+  ],
+  "notif_digest_monthly": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "This month, {count} bottle not to forget: {names}",
+        "countPlural=*": "This month, {count} bottles not to forget: {names}"
+      }
+    }
+  ]
 }

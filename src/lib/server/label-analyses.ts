@@ -13,7 +13,11 @@ export type AnalysisOutcome =
   | { ok: true; analysisId: number; analysis: LabelAnalysis; model: string }
   | { ok: false; analysisId: number | null; error: AiErrorCode | 'limit_reached' | 'invalid_photo' };
 
-function zonedParts(ms: number, timeZone: string): { y: number; mo: number; d: number; offsetMs: number } {
+/** Local calendar fields of an instant in `timeZone`, plus the zone's UTC offset at that instant. Throws RangeError for an invalid zone. */
+export function zonedParts(
+  ms: number,
+  timeZone: string
+): { y: number; mo: number; d: number; h: number; offsetMs: number } {
   const parts = new Intl.DateTimeFormat('en-US', {
     timeZone,
     hourCycle: 'h23',
@@ -26,7 +30,7 @@ function zonedParts(ms: number, timeZone: string): { y: number; mo: number; d: n
   }).formatToParts(new Date(ms));
   const n = (t: string) => Number(parts.find((p) => p.type === t)!.value);
   const asUtc = Date.UTC(n('year'), n('month') - 1, n('day'), n('hour'), n('minute'), n('second'));
-  return { y: n('year'), mo: n('month'), d: n('day'), offsetMs: asUtc - Math.floor(ms / 1000) * 1000 };
+  return { y: n('year'), mo: n('month'), d: n('day'), h: n('hour'), offsetMs: asUtc - Math.floor(ms / 1000) * 1000 };
 }
 
 /** Unix timestamp (seconds) of the start of the local day containing `now` in `timeZone`. */
