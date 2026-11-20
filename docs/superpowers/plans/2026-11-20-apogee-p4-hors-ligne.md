@@ -108,4 +108,5 @@
 ## Vérification finale
 
 - [ ] `npm test`, `npm run check`, `npm run build` ; CI verte.
+- [ ] **Dependabot** : vérifier les alertes ouvertes (`gh api "repos/Gavark/apogee/dependabot/alerts?state=open"`, à défaut `npm audit`) et les PR Dependabot en attente ; corriger (mise à jour, `overrides` si la dépendance est transitive) ou consigner pourquoi une alerte est laissée ouverte ; `npm test` après chaque correction.
 - [ ] `tasks/todo.md` mis à jour.
