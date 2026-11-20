@@ -1,4 +1,4 @@
-import webpush from 'web-push';
+import { generateVAPIDKeys } from 'web-push';
 import { eq } from 'drizzle-orm';
 import type { BaseSQLiteDatabase } from 'drizzle-orm/sqlite-core';
 import * as schema from '../db/schema';
@@ -20,7 +20,7 @@ export async function getVapidKeys(db: DB): Promise<VapidKeys> {
   const privRow = db.select().from(schema.appConfig).where(eq(schema.appConfig.key, KEY_PRIVATE)).all()[0];
   if (pubRow && privRow) return { publicKey: pubRow.value, privateKey: privRow.value };
 
-  const generated = webpush.generateVAPIDKeys();
+  const generated = generateVAPIDKeys();
   const t = Math.floor(Date.now() / 1000);
   db.insert(schema.appConfig)
     .values([
