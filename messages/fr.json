@@ -448,5 +448,22 @@
   "error_back_app": "Retour à ma cave",
   "error_back_login": "Retour à la connexion",
   "account_locations_link": "Où sont rangées vos bouteilles",
-  "cave_manage_locations": "Gérer les lieux"
+  "cave_manage_locations": "Gérer les lieux",
+  "admin_ai_title": "Analyse IA de l'étiquette",
+  "admin_ai_off": "Non configurée. Voir le README pour activer l'analyse par IA.",
+  "admin_ai_provider": "Fournisseur : {provider}",
+  "admin_ai_model": "Modèle : {model}",
+  "admin_ai_base_url": "Adresse : {url}",
+  "admin_ai_limit": "Limite : {count} analyses par jour et par foyer",
+  "admin_ai_limit_unlimited": "Limite : aucune (analyses illimitées)",
+  "admin_ai_today": "Analyses réussies aujourd'hui (UTC), toute l'instance : {count}",
+  "admin_ai_test": "Tester (un appel au fournisseur)",
+  "admin_ai_test_hint": "Un appel réel est facturé par le fournisseur, quelques centimes avec le modèle par défaut.",
+  "admin_ai_test_ok": "Test réussi : {model}, {ms} ms.",
+  "admin_ai_test_err_not_configured": "Test impossible : l'analyse par IA n'est pas configurée.",
+  "admin_ai_test_err_auth": "Accès refusé par le fournisseur : vérifiez la clé (AI_API_KEY).",
+  "admin_ai_test_err_rate_limited": "Fournisseur saturé ou quota atteint : réessayez plus tard.",
+  "admin_ai_test_err_refused": "Le fournisseur a refusé la requête.",
+  "admin_ai_test_err_invalid_response": "Réponse du fournisseur inexploitable : vérifiez le modèle.",
+  "admin_ai_test_err_unavailable": "Fournisseur injoignable : vérifiez l'adresse, le modèle et le réseau."
 }

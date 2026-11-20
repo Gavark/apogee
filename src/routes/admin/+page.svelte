@@ -24,6 +24,17 @@
     expired: m.invite_status_expired
   };
 
+  const aiTestErrors: Record<string, () => string> = {
+    not_configured: m.admin_ai_test_err_not_configured,
+    auth: m.admin_ai_test_err_auth,
+    rate_limited: m.admin_ai_test_err_rate_limited,
+    refused: m.admin_ai_test_err_refused,
+    invalid_response: m.admin_ai_test_err_invalid_response
+  };
+  const aiTestError = (code: string) => (aiTestErrors[code] ?? m.admin_ai_test_err_unavailable)();
+
+  let testing = $state(false);
+
   const afterAction = (message: string) => () => async ({ result, update }: any) => {
     await update();
     if (result.type === 'success') showToast(message);
@@ -88,6 +99,49 @@
         </li>
       {/each}
     </ul>
+  </section>
+
+  <section>
+    <h2>{m.admin_ai_title()}</h2>
+    <Card>
+      {#if data.ai.configured}
+        <ul class="ai">
+          <li>{m.admin_ai_provider({ provider: data.ai.provider })}</li>
+          <li>{m.admin_ai_model({ model: data.ai.model ?? '' })}</li>
+          {#if data.ai.baseUrl}<li class="url">{m.admin_ai_base_url({ url: data.ai.baseUrl })}</li>{/if}
+          <li>
+            {data.ai.dailyLimit === 0
+              ? m.admin_ai_limit_unlimited()
+              : m.admin_ai_limit({ count: data.ai.dailyLimit })}
+          </li>
+          <li>{m.admin_ai_today({ count: data.ai.analysesToday })}</li>
+        </ul>
+      {:else}
+        <p class="muted">{m.admin_ai_off()}</p>
+      {/if}
+      <form
+        method="POST"
+        action="?/testAi"
+        class="ai-test"
+        use:enhance={() => {
+          testing = true;
+          return async ({ update }) => {
+            await update({ reset: false });
+            testing = false;
+          };
+        }}
+      >
+        <Button type="submit" variant="secondary" disabled={testing}>{m.admin_ai_test()}</Button>
+        <p class="muted hint">{m.admin_ai_test_hint()}</p>
+      </form>
+      {#if form?.aiTest}
+        {#if form.aiTest.ok}
+          <p class="ai-result" role="status">{m.admin_ai_test_ok({ model: form.aiTest.model, ms: form.aiTest.ms })}</p>
+        {:else}
+          <p class="form-alert" role="alert">{aiTestError(form.aiTest.error)}</p>
+        {/if}
+      {/if}
+    </Card>
   </section>
 
   <section>
@@ -165,5 +219,10 @@
   .email { display: flex; align-items: center; gap: var(--s-2); flex-wrap: wrap; min-width: 0; overflow-wrap: anywhere; font-size: var(--fs-sm); }
   .you { font-size: var(--fs-sm); }
   .meta { display: flex; align-items: center; flex-wrap: wrap; gap: var(--s-2); font-size: var(--fs-sm); margin-bottom: var(--s-3); }
+  .ai { list-style: none; padding: 0; margin: 0 0 var(--s-3); display: grid; gap: var(--s-1); font-size: var(--fs-sm); }
+  .url { overflow-wrap: anywhere; }
+  .ai-test { display: grid; gap: var(--s-2); }
+  .hint { font-size: var(--fs-sm); margin: 0; }
+  .ai-result { margin: var(--s-3) 0 0; font-size: var(--fs-sm); }
   .confirm { display: grid; gap: var(--s-2); }
 </style>

@@ -448,5 +448,22 @@
   "error_back_app": "Back to my cellar",
   "error_back_login": "Back to sign in",
   "account_locations_link": "Where your bottles are kept",
-  "cave_manage_locations": "Manage locations"
+  "cave_manage_locations": "Manage locations",
+  "admin_ai_title": "AI label analysis",
+  "admin_ai_off": "Not configured. See the README to enable AI analysis.",
+  "admin_ai_provider": "Provider: {provider}",
+  "admin_ai_model": "Model: {model}",
+  "admin_ai_base_url": "Address: {url}",
+  "admin_ai_limit": "Limit: {count} analyses per day and per household",
+  "admin_ai_limit_unlimited": "Limit: none (unlimited analyses)",
+  "admin_ai_today": "Successful analyses today (UTC), whole instance: {count}",
+  "admin_ai_test": "Test (one call to the provider)",
+  "admin_ai_test_hint": "A real call is billed by the provider, a few cents with the default model.",
+  "admin_ai_test_ok": "Test passed: {model}, {ms} ms.",
+  "admin_ai_test_err_not_configured": "Cannot test: AI analysis is not configured.",
+  "admin_ai_test_err_auth": "Access denied by the provider: check the key (AI_API_KEY).",
+  "admin_ai_test_err_rate_limited": "Provider busy or quota reached: try again later.",
+  "admin_ai_test_err_refused": "The provider refused the request.",
+  "admin_ai_test_err_invalid_response": "Unusable response from the provider: check the model.",
+  "admin_ai_test_err_unavailable": "Provider unreachable: check the address, the model and the network."
 }

@@ -10,6 +10,8 @@ import {
   deleteUserAsAdmin,
   deleteHouseholdAsAdmin
 } from '$lib/server/households';
+import { getAiProvider } from '$lib/server/ai/config';
+import { aiStatus, testAiProvider } from './_ai';
 import * as m from '$paraglide/messages';
 
 /** Instance admins only; everyone else gets the same 404 as an unknown page. */
@@ -25,6 +27,7 @@ export const load: PageServerLoad = ({ locals, url }) => {
   const households = listHouseholdsForAdmin(db);
   const nameById = new Map(households.map((h) => [h.id, h.name]));
   return {
+    ai: aiStatus(db, process.env),
     currentUserId: ctx.userId,
     ownHouseholdId: ctx.householdId,
     // Names, members and counts only: the cellars themselves stay private.
@@ -53,6 +56,12 @@ export const actions: Actions = {
     const { db } = getDb();
     createInvitation(db, { createdBy: ctx.userId, householdId: null });
     return { invited: true };
+  },
+
+  /** One real call to the provider (costs a few cents): admin only, stores nothing. */
+  testAi: async ({ locals }) => {
+    requireAdmin(locals);
+    return { aiTest: await testAiProvider(getAiProvider()) };
   },
 
   deleteUser: async ({ request, locals }) => {
