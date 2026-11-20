@@ -2,7 +2,7 @@ import { and, eq } from 'drizzle-orm';
 import type { BaseSQLiteDatabase } from 'drizzle-orm/sqlite-core';
 import * as schema from '$lib/server/db/schema';
 import type { HouseholdCtx } from '$lib/server/context';
-import { isSafeRelPath, readPhoto, type PhotoMime } from '$lib/server/photos';
+import { isHouseholdPhotoPath, readPhoto, type PhotoMime } from '$lib/server/photos';
 
 type DB = BaseSQLiteDatabase<'sync', unknown, typeof schema>;
 
@@ -18,6 +18,6 @@ export function loadWinePhoto(
     .from(schema.wines)
     .where(and(eq(schema.wines.id, wineId), eq(schema.wines.householdId, ctx.householdId)))
     .get();
-  if (!row?.labelPhoto || !isSafeRelPath(row.labelPhoto)) return null;
+  if (!row?.labelPhoto || !isHouseholdPhotoPath(row.labelPhoto, ctx.householdId)) return null;
   return readPhoto(dir, row.labelPhoto);
 }

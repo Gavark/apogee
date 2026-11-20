@@ -1,5 +1,5 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { mkdtempSync, rmSync, existsSync } from 'node:fs';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { mkdtempSync, rmSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { eq } from 'drizzle-orm';
@@ -86,6 +86,33 @@ describe('analyzeAndStore', () => {
     expect(out).toEqual({ ok: false, analysisId: null, error: 'invalid_photo' });
     expect(rows()).toHaveLength(0);
     expect(p.calls).toHaveLength(0);
+  });
+
+  it('échec de stockage (volume inutilisable) → unavailable, journalisé sans chemin, rien enregistré', async () => {
+    const notADir = join(dir, 'file');
+    writeFileSync(notADir, 'x');
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const p = fakeProvider(sampleAnalysis());
+      const out = await analyzeAndStore(tdb.db, ctx, p, input({ photosDir: notADir }));
+      expect(out).toEqual({ ok: false, analysisId: null, error: 'unavailable' });
+      expect(rows()).toHaveLength(0);
+      expect(p.calls).toHaveLength(0);
+      expect(spy).toHaveBeenCalledTimes(1);
+      expect(spy.mock.calls.flat().every((a) => !String(a).includes(dir))).toBe(true);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it("existingPhotoPath d'un autre foyer → traité comme sans photo", async () => {
+    const other = makeHousehold(tdb, 'Autre');
+    const { path } = savePhoto(dir, other, JPEG);
+    const p = fakeProvider(sampleAnalysis());
+    const out = await analyzeAndStore(tdb.db, ctx, p, input({ photo: null, existingPhotoPath: path }));
+    expect(out.ok).toBe(true);
+    expect(p.calls[0].image).toBeNull();
+    expect(rows()[0].photoPath).toBeNull();
   });
 
   it('provider null → not_configured, photo conservée, analysisId utilisable', async () => {
@@ -177,6 +204,24 @@ describe('countAnalysesToday', () => {
   });
 });
 
+describe('countAnalysesToday : changements d heure', () => {
+  const ts = (iso: string) => Math.floor(Date.parse(iso) / 1000);
+  const ok = (iso: string) =>
+    tdb.db.insert(tdb.schema.labelAnalyses).values({ householdId: hid, result: '{}', createdAt: ts(iso) }).run();
+
+  it('Paris, 29/03/2026 (heure d ete) : minuit local = 23:00Z la veille', () => {
+    ok('2026-03-28T22:30:00Z'); // 23:30 on the 28th: not today
+    ok('2026-03-28T23:30:00Z'); // 00:30 on the 29th
+    expect(countAnalysesToday(tdb.db, hid, 'Europe/Paris', new Date('2026-03-29T12:00:00Z'))).toBe(1);
+  });
+
+  it('Paris, 25/10/2026 (heure d hiver) : minuit local = 22:00Z la veille', () => {
+    ok('2026-10-24T21:30:00Z'); // 23:30 on the 24th: not today
+    ok('2026-10-24T22:30:00Z'); // 00:30 on the 25th
+    expect(countAnalysesToday(tdb.db, hid, 'Europe/Paris', new Date('2026-10-25T12:00:00Z'))).toBe(1);
+  });
+});
+
 describe('getOwnedAnalysis', () => {
   it("d'un autre foyer → NotFoundError", async () => {
     const out = await analyzeAndStore(tdb.db, ctx, fakeProvider(sampleAnalysis()), input());
@@ -201,6 +246,22 @@ describe('suppression', () => {
   it('deleteWine avec fichier déjà absent ne lève pas', () => {
     const w = mkWine(ctx, 2015, '1/00000000-0000-0000-0000-000000000000.jpg');
     expect(() => deleteWine(tdb.db, ctx, w, dir)).not.toThrow();
+  });
+
+  it("une erreur de suppression autre qu'ENOENT est journalisée, pas levée (la suppression a abouti)", () => {
+    const rel = '1/00000000-0000-0000-0000-000000000001.jpg';
+    // a non-empty directory at the photo path makes rmSync fail with something other than ENOENT
+    mkdirSync(join(dir, rel), { recursive: true });
+    writeFileSync(join(dir, rel, 'x'), 'x');
+    const w = mkWine(ctx, 2015, rel);
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      expect(() => deleteWine(tdb.db, ctx, w, dir)).not.toThrow();
+      expect(spy).toHaveBeenCalledTimes(1);
+      expect(tdb.db.select().from(tdb.schema.wines).where(eq(tdb.schema.wines.id, w)).all()).toHaveLength(0);
+    } finally {
+      spy.mockRestore();
+    }
   });
 
   it('deleteHouseholdAsAdmin supprime le dossier du foyer', () => {
@@ -228,6 +289,12 @@ describe('loadWinePhoto (route photo)', () => {
     const other = makeHousehold(tdb, 'Autre');
     const otherCtx = { userId: makeUser(tdb, other), householdId: other, isAdmin: false };
     expect(loadWinePhoto(tdb.db, otherCtx, w, dir)).toBeNull();
+
+    // a path pointing into another household folder is refused too
+    const other2 = makeHousehold(tdb, 'Autre 2');
+    const foreign = savePhoto(dir, other2, JPEG).path;
+    tdb.db.update(tdb.schema.wines).set({ labelPhoto: foreign }).where(eq(tdb.schema.wines.id, w)).run();
+    expect(loadWinePhoto(tdb.db, ctx, w, dir)).toBeNull();
 
     tdb.db.update(tdb.schema.wines).set({ labelPhoto: '../../etc/passwd' }).where(eq(tdb.schema.wines.id, w)).run();
     expect(loadWinePhoto(tdb.db, ctx, w, dir)).toBeNull();

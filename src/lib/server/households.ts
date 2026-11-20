@@ -2,7 +2,7 @@ import { eq, sql, asc, count } from 'drizzle-orm';
 import type { BaseSQLiteDatabase } from 'drizzle-orm/sqlite-core';
 import * as schema from './db/schema';
 import type { HouseholdCtx } from './context';
-import { deleteHouseholdPhotos, photosDir } from './photos';
+import { cleanupQuietly, deleteHouseholdPhotos, photosDir } from './photos';
 
 type DB = BaseSQLiteDatabase<'sync', unknown, typeof schema>;
 
@@ -75,7 +75,7 @@ export function deleteHouseholdAsAdmin(
     return { ok: true as const };
   });
   // Only once the delete has committed.
-  if (result.ok) deleteHouseholdPhotos(photosDirPath, householdId);
+  if (result.ok) cleanupQuietly(() => deleteHouseholdPhotos(photosDirPath, householdId));
   return result;
 }
 

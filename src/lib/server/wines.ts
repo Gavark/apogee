@@ -3,7 +3,7 @@ import type { BaseSQLiteDatabase } from 'drizzle-orm/sqlite-core';
 import * as schema from './db/schema';
 import { NotFoundError, type HouseholdCtx } from './context';
 import type { Wine } from './db/schema';
-import { deletePhoto, photosDir } from './photos';
+import { cleanupQuietly, deletePhoto, photosDir } from './photos';
 import {
   HOME_SECTION_ORDER,
   computePhase,
@@ -256,7 +256,7 @@ export function deleteWine(
     return stillUsed ? null : wine.labelPhoto;
   });
   // Only once the delete has committed; a photo another wine still points to is kept.
-  deletePhoto(photosDirPath, photo);
+  cleanupQuietly(() => deletePhoto(photosDirPath, photo));
 }
 
 export type CellarLot = {

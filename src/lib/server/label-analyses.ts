@@ -2,7 +2,7 @@ import { and, eq, gte, isNotNull, sql } from 'drizzle-orm';
 import type { BaseSQLiteDatabase } from 'drizzle-orm/sqlite-core';
 import * as schema from './db/schema';
 import { NotFoundError, type HouseholdCtx } from './context';
-import { readPhoto, savePhoto, type PhotoMime } from './photos';
+import { isHouseholdPhotoPath, readPhoto, savePhoto, type PhotoMime } from './photos';
 import { AiError, type AiErrorCode, type AiProvider, type LabelAnalysis, type LabelHints } from './ai/types';
 
 type DB = BaseSQLiteDatabase<'sync', unknown, typeof schema>;
@@ -88,10 +88,14 @@ export async function analyzeAndStore(
       const saved = savePhoto(input.photosDir, ctx.householdId, input.photo);
       photoPath = saved.path;
       image = { data: input.photo, mimeType: saved.mime };
-    } catch {
-      return { ok: false, analysisId: null, error: 'invalid_photo' };
+    } catch (e) {
+      if (e instanceof RangeError) return { ok: false, analysisId: null, error: 'invalid_photo' };
+      // Storage failure (permissions, disk full, bad mount): not the user's fault. Log the code only.
+      const code = (e as NodeJS.ErrnoException).code;
+      console.error('photo save failed:', typeof code === 'string' ? code : e instanceof Error ? e.name : 'unknown');
+      return { ok: false, analysisId: null, error: 'unavailable' };
     }
-  } else if (input.existingPhotoPath) {
+  } else if (input.existingPhotoPath && isHouseholdPhotoPath(input.existingPhotoPath, ctx.householdId)) {
     const existing = readPhoto(input.photosDir, input.existingPhotoPath);
     if (existing) {
       photoPath = input.existingPhotoPath;

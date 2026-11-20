@@ -30,6 +30,21 @@ export function isSafeRelPath(relPath: string): boolean {
   return SAFE_REL_PATH.test(relPath);
 }
 
+/** A safe stored path that lives in the given household folder. */
+export function isHouseholdPhotoPath(relPath: string, householdId: number): boolean {
+  return isSafeRelPath(relPath) && relPath.startsWith(`${householdId}/`);
+}
+
+/** Runs a cleanup after a committed delete: a failure is logged (error code only), never thrown. */
+export function cleanupQuietly(fn: () => void): void {
+  try {
+    fn();
+  } catch (e) {
+    const code = (e as NodeJS.ErrnoException).code;
+    console.error('photo cleanup failed:', typeof code === 'string' ? code : 'unknown');
+  }
+}
+
 /** Writes the photo under `<dir>/<householdId>/<uuid>.<ext>`. Throws RangeError when too big or not an image. */
 export function savePhoto(
   dir: string,
