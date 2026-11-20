@@ -2,6 +2,7 @@ import type { BaseSQLiteDatabase } from 'drizzle-orm/sqlite-core';
 import * as schema from '../db/schema';
 import { hashPassword, isStrongEnough } from './password';
 import { normalizeEmail } from './email';
+import { resolveInstanceTimezone } from '../timezone';
 
 // Widened so transaction-scoped handles passed in by db.transaction(...) also satisfy it.
 type DB = BaseSQLiteDatabase<'sync', unknown, typeof schema>;
@@ -30,6 +31,7 @@ export function insertHouseholdAndAdmin(
         passwordHash: input.passwordHash,
         isAdmin: 1,
         locale: input.locale ?? 'fr',
+        timezone: resolveInstanceTimezone(),
         householdId: household.id,
         createdAt: t,
         updatedAt: t

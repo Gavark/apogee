@@ -79,7 +79,11 @@ export function renameLocation(db: DB, ctx: HouseholdCtx, id: number, rawName: s
   const name = normalizeName(rawName);
   if (!name) return { ok: false, reason: 'empty' };
   if (nameTaken(db, ctx, name, id)) return { ok: false, reason: 'duplicate' };
-  const location = db.update(locations).set({ name }).where(eq(locations.id, id)).returning().get();
+  const location = db.update(locations)
+    .set({ name })
+    .where(and(eq(locations.id, id), eq(locations.householdId, ctx.householdId)))
+    .returning()
+    .get();
   return { ok: true, location };
 }
 

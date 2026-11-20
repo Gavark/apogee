@@ -29,7 +29,7 @@ Les migrations de base de données sont appliquées automatiquement à chaque d�
 | `ADMIN_EMAIL` | (vide) | Email du premier administrateur (voir Premier lancement). |
 | `ADMIN_PASSWORD` | (vide) | Mot de passe du premier administrateur, 10 caractères minimum. |
 | `HOUSEHOLD_NAME` | `Ma cave` | Nom du premier foyer créé par l'amorçage. |
-| `TZ` | `Europe/Paris` | Fuseau horaire. |
+| `TZ` | `Europe/Paris` | Fuseau horaire de l'instance, utilisé pour les nouveaux comptes et le calcul des phases. |
 | `DATABASE_PATH` | `/data/apogee.sqlite` (image) | Chemin du fichier SQLite. Fixé dans l'image, à ne pas changer avec Docker. |
 | `NODE_ENV` | `production` (image) | Fixé par l'image : cookies sécurisés, et la page `/dev/styleguide` répond 404. |
 

@@ -5,6 +5,7 @@ import { hashPassword, isStrongEnough } from '$lib/server/auth/password';
 import { findUsableInvitation, markInvitationUsed } from '$lib/server/auth/invitations';
 import { MAX_HOUSEHOLD_NAME_LEN } from '$lib/server/households';
 import { normalizeEmail, isValidEmail } from '$lib/server/auth/email';
+import { resolveInstanceTimezone } from '$lib/server/timezone';
 
 type DB = ReturnType<typeof drizzle<typeof schema>>;
 
@@ -58,7 +59,7 @@ export async function signupWithToken(
 
     const row = tx
       .insert(schema.users)
-      .values({ email, passwordHash: hash, isAdmin: 0, locale, householdId, createdAt: t, updatedAt: t })
+      .values({ email, passwordHash: hash, isAdmin: 0, locale, timezone: resolveInstanceTimezone(), householdId, createdAt: t, updatedAt: t })
       .returning()
       .all()[0];
     markInvitationUsed(tx, inv.id, row.id);
