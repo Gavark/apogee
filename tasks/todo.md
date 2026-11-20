@@ -31,7 +31,7 @@ Détail : `docs/superpowers/plans/2026-11-19-apogee-p1-fondations-cave.md`
   - [x] Task 6 : fiche — photo, provenance, ré-estimation
   - [x] Task 7 : admin IA, docs
   - [x] Vérification finale (revue de branche + 12 corrections relues)
-  - [ ] Essai réel avec une vraie clé (avec accord)
+  - [x] Essai réel avec une vraie clé : 1er appel refusé (400, enum + type tableau dans le schéma) → corrigé en anyOf ; étiquette de test Gigondas 2018 lue en 5,3 s (~1,4 ct) ; étiquette réelle Gevrey-Chambertin sans millésime lue en 6,2 s (~1,8 ct), confiance faible justifiée
 - [ ] Plan 3 : notifications (phases + rappel mensuel)
 - [ ] Plan 4 : réseau intermittent et resynchronisation
 

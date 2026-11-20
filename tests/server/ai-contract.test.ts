@@ -149,8 +149,12 @@ describe('normalizeAnalysis', () => {
     expect(w.additionalProperties).toBe(false);
     const wk = ['drink_from', 'peak_from', 'peak_to', 'drink_until'];
     expect([...w.required].sort()).toEqual([...wk].sort());
-    expect(s.properties.color.enum).toEqual(['red', 'white', 'rose', 'sparkling', 'sweet', 'fortified', null]);
-    expect(s.properties.confidence.enum).toEqual(['low', 'medium', 'high', null]);
+    expect(s.properties.color).toEqual({
+      anyOf: [{ type: 'string', enum: ['red', 'white', 'rose', 'sparkling', 'sweet', 'fortified'] }, { type: 'null' }]
+    });
+    expect(s.properties.confidence).toEqual({
+      anyOf: [{ type: 'string', enum: ['low', 'medium', 'high'] }, { type: 'null' }]
+    });
     expect(JSON.stringify(s)).not.toMatch(/"(format|minimum|maximum|pattern)"/);
   });
 });
@@ -179,6 +183,13 @@ describe('LABEL_JSON_SCHEMA structure', () => {
       if (Array.isArray(n.type) || n.anyOf) unions++;
     });
     expect(unions).toBeLessThanOrEqual(16);
+  });
+
+  it('aucun enum combiné à un type tableau (refusé par les sorties structurées strictes)', () => {
+    walk(LABEL_JSON_SCHEMA, (n) => {
+      if (n.enum) expect(Array.isArray(n.type)).toBe(false);
+      for (const alt of (n.anyOf ?? []) as Node[]) if (alt.enum) expect(Array.isArray(alt.type)).toBe(false);
+    });
   });
 
   it('chaque objet : additionalProperties false et toutes les propriétés requises', () => {

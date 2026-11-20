@@ -25,7 +25,8 @@ export const LABEL_JSON_SCHEMA: Record<string, unknown> = {
     appellation: str,
     region: str,
     country: str,
-    color: { type: ['string', 'null'], enum: [...COLORS, null] },
+    // Strict structured outputs reject `enum` combined with a type array: nullable enums use anyOf.
+    color: { anyOf: [{ type: 'string', enum: [...COLORS] }, { type: 'null' }] },
     vintage: int,
     grapes: str,
     format_cl: int,
@@ -35,7 +36,7 @@ export const LABEL_JSON_SCHEMA: Record<string, unknown> = {
       required: ['drink_from', 'peak_from', 'peak_to', 'drink_until'],
       properties: { drink_from: int, peak_from: int, peak_to: int, drink_until: int }
     },
-    confidence: { type: ['string', 'null'], enum: [...CONFIDENCES, null] },
+    confidence: { anyOf: [{ type: 'string', enum: [...CONFIDENCES] }, { type: 'null' }] },
     rationale: str
   }
 };
