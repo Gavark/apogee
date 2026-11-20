@@ -19,6 +19,7 @@ import {
   type AiProvenance,
   type CellarRow
 } from '../../src/lib/server/wines';
+import { applyAiFromForm } from '../../src/routes/app/wines/[id]/_logic';
 import { NotFoundError, type HouseholdCtx } from '../../src/lib/server/context';
 import type { Phase, WindowYears } from '../../src/lib/phase';
 
@@ -240,7 +241,7 @@ describe('wines (db)', () => {
   const rowOf = (id: number) => tdb.db.select().from(tdb.schema.wines).where(eq(tdb.schema.wines.id, id)).get()!;
 
   describe('applyAiWindow / fiche', () => {
-    const analysisRow = (c: HouseholdCtx, window: WindowYears, photoPath: string | null = null) =>
+    const analysisRow = (c: HouseholdCtx, window: WindowYears, photoPath: string | null = null, isWineLabel = true) =>
       tdb.db
         .insert(tdb.schema.labelAnalyses)
         .values({
@@ -248,7 +249,7 @@ describe('wines (db)', () => {
           photoPath,
           model: 'm2',
           result: JSON.stringify({
-            isWineLabel: true, producer: 'Autre', cuvee: null, appellation: null, region: null, country: null,
+            isWineLabel, producer: 'Autre', cuvee: null, appellation: null, region: null, country: null,
             color: 'white', vintage: 1999, grapes: null, formatCl: 150, window, confidence: 'high', rationale: 'Parce que.'
           })
         })
@@ -283,6 +284,41 @@ describe('wines (db)', () => {
       const before = rowOf(wineId);
       expect(() => applyAiWindow(tdb.db, ctx, wineId, analysisRow(ctx, NO_WINDOW, '1/x.jpg'))).toThrow(RangeError);
       expect(rowOf(wineId)).toEqual(before);
+    });
+
+    it("applyAiWindow : analyse qui n'est pas une étiquette → RangeError, rien ne change", () => {
+      const { wineId } = createWine(tdb.db, ctx, wine(), lot());
+      const before = rowOf(wineId);
+      expect(() => applyAiWindow(tdb.db, ctx, wineId, analysisRow(ctx, win(2026, 2040), null, false))).toThrow(RangeError);
+      expect(rowOf(wineId)).toEqual(before);
+    });
+
+    it('applyAiWindow : fenêtre incohérente avec le millésime ou partielle → RangeError', () => {
+      const { wineId } = createWine(tdb.db, ctx, wine({ vintage: 2015 }), lot());
+      const before = rowOf(wineId);
+      expect(() => applyAiWindow(tdb.db, ctx, wineId, analysisRow(ctx, win(2010, 2040)))).toThrow(RangeError);
+      expect(() => applyAiWindow(tdb.db, ctx, wineId, analysisRow(ctx, { ...NO_WINDOW, drinkFrom: 2026 }))).toThrow(RangeError);
+      expect(rowOf(wineId)).toEqual(before);
+    });
+
+    it('applyAiFromForm : analysisId non numérique → 400, étranger → NotFoundError, valide → 200', () => {
+      const { wineId } = createWine(tdb.db, ctx, wine(), lot());
+      const form = (v?: string) => {
+        const f = new FormData();
+        if (v !== undefined) f.set('analysisId', v);
+        return f;
+      };
+      expect(applyAiFromForm(tdb.db, ctx, wineId, form())).toEqual({ status: 400 });
+      expect(applyAiFromForm(tdb.db, ctx, wineId, form('abc'))).toEqual({ status: 400 });
+      expect(applyAiFromForm(tdb.db, ctx, wineId, form('99999999999999999999'))).toEqual({ status: 400 });
+      const foreign = analysisRow(otherCtx, win(2026, 2040));
+      expect(() => applyAiFromForm(tdb.db, ctx, wineId, form(String(foreign)))).toThrow(NotFoundError);
+      const empty = analysisRow(ctx, NO_WINDOW);
+      expect(applyAiFromForm(tdb.db, ctx, wineId, form(String(empty)))).toEqual({ status: 400 });
+      expect(rowOf(wineId).windowSource).toBe('manual');
+      const ok = analysisRow(ctx, win(2026, 2040));
+      expect(applyAiFromForm(tdb.db, ctx, wineId, form(String(ok)))).toEqual({ status: 200 });
+      expect(rowOf(wineId).windowSource).toBe('ai');
     });
 
     it("applyAiWindow : vin ou analyse d'un autre foyer → NotFoundError", () => {

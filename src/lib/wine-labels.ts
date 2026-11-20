@@ -33,6 +33,16 @@ const AI_ERRORS: Record<string, () => string> = {
 /** The user-facing message for a failed analysis outcome (unknown codes read as "unavailable"). */
 export const aiErrorMessage = (code: string): string => (AI_ERRORS[code] ?? m.add_ai_error_unavailable)();
 
+const REESTIMATE_ERRORS: Record<string, () => string> = {
+  limit_reached: m.ai_est_error_limit,
+  not_configured: m.ai_est_error_not_configured,
+  auth: m.ai_est_error_auth,
+  rate_limited: m.ai_est_error_rate_limited
+};
+
+/** Same codes as `aiErrorMessage`, worded for re-estimating an existing wine (no "enter the wine" advice). */
+export const reestimateErrorMessage = (code: string): string => (REESTIMATE_ERRORS[code] ?? m.ai_est_error_default)();
+
 export const confidenceLabel = (c: string | null): string =>
   c === 'high' ? m.add_ai_confidence_high() : c === 'medium' ? m.add_ai_confidence_medium() : m.add_ai_confidence_low();
 

@@ -11,7 +11,7 @@
 
   let { data } = $props();
 
-  // The wine being estimated; read from the live data so a refresh after applying moves the row.
+  // The wine being estimated (a snapshot of its row: the sheet only needs its id and current window).
   let estimating = $state<CellarRow | null>(null);
   const estimate = $derived(data.aiEnabled ? (row: CellarRow) => (estimating = row) : undefined);
 </script>

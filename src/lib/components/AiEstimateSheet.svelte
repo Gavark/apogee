@@ -8,7 +8,7 @@
   import WindowTimeline from '$lib/components/WindowTimeline.svelte';
   import { analyzeLabel } from '$lib/label-client';
   import { SessionExpiredError } from '$lib/stock-client';
-  import { aiErrorMessage, confidenceLabel } from '$lib/wine-labels';
+  import { reestimateErrorMessage, confidenceLabel } from '$lib/wine-labels';
   import type { WindowYears } from '$lib/phase';
   import type { LabelAnalysis } from '$lib/server/ai/types';
 
@@ -43,12 +43,12 @@
     let next: State;
     try {
       const outcome = await analyzeLabel({ wineId: id });
-      if (!outcome.ok) next = { kind: 'error', message: aiErrorMessage(outcome.error) };
+      if (!outcome.ok) next = { kind: 'error', message: reestimateErrorMessage(outcome.error) };
       else if (!hasWindow(outcome.analysis.window)) next = { kind: 'error', message: m.ai_est_no_window() };
       else next = { kind: 'ready', analysisId: outcome.analysisId, analysis: outcome.analysis };
     } catch (e) {
       if (e instanceof SessionExpiredError) return;
-      next = { kind: 'error', message: aiErrorMessage('unavailable') };
+      next = { kind: 'error', message: reestimateErrorMessage('unavailable') };
     }
     if (mine === run) view = next;
   }

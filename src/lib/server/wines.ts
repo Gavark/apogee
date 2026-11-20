@@ -298,8 +298,9 @@ export function applyAiWindow(db: DB, ctx: HouseholdCtx, wineId: number, analysi
   db.transaction((tx) => {
     const wine = findOwnedWine(tx, ctx, wineId);
     const found = getOwnedAnalysis(tx, ctx, analysisId);
-    const proposed = found.analysis?.window;
-    if (!proposed || !hasYears(proposed)) throw new RangeError('analysis has no window');
+    if (!found.analysis?.isWineLabel) throw new RangeError('analysis is not a wine label');
+    const proposed = found.analysis.window;
+    if (!hasYears(proposed)) throw new RangeError('analysis has no window');
     const check = validateWindow(proposed, wine.vintage ?? wine.acquiredYear);
     if (check) throw new RangeError(`analysis window is not valid: ${check.reason}`);
     const now = Math.floor(Date.now() / 1000);
@@ -310,8 +311,8 @@ export function applyAiWindow(db: DB, ctx: HouseholdCtx, wineId: number, analysi
         peakTo: proposed.peakTo,
         drinkUntil: proposed.drinkUntil,
         windowSource: 'ai',
-        aiConfidence: found.analysis!.confidence,
-        aiRationale: found.analysis!.rationale,
+        aiConfidence: found.analysis.confidence,
+        aiRationale: found.analysis.rationale,
         aiModel: found.model,
         aiAnalyzedAt: now,
         // Never replaces a photo the wine already has.

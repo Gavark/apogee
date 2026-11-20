@@ -250,9 +250,11 @@
   currentYear={year}
 />
 
-<Sheet open={photoOpen} onclose={() => (photoOpen = false)} title={m.wine_photo_title()}>
-  <img class="photo-full" src="/app/wines/{wine.id}/photo" alt={title} />
-</Sheet>
+{#if detail.hasPhoto}
+  <Sheet open={photoOpen} onclose={() => (photoOpen = false)} title={m.wine_photo_title()}>
+    {#if photoOpen}<img class="photo-full" src="/app/wines/{wine.id}/photo" alt={title} />{/if}
+  </Sheet>
+{/if}
 
 <Sheet open={confirmingDelete} onclose={() => (confirmingDelete = false)} title={m.wine_delete_title()}>
   <p>{m.wine_delete_body()}</p>
