@@ -65,8 +65,9 @@ async function tickOnce(db: DB, now: Date, sender: PushSender): Promise<{ proces
         .update(users)
         .set({ lastDispatchDate: local.date, lastDispatchAt: nowSec, lastMonthlyMonth: local.month })
         .where(and(eq(users.id, user.id), or(isNull(users.lastDispatchDate), ne(users.lastDispatchDate, local.date))))
-        .run();
-      if (claimed.changes === 0) continue;
+        .returning({ id: users.id })
+        .all();
+      if (claimed.length === 0) continue;
       processed++;
 
       const refZone = householdReferenceTimeZone(db, user.householdId);
