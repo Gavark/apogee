@@ -64,11 +64,12 @@ try {
   # 1. Copy local backups younger than N days that are missing (or differ in size)
   #    at the destination. Each copy is hash-checked against the original.
   $copied = 0
+  $newlyCopied = @()
   $recent = @(Get-BackupFiles $Source | Where-Object { $_.LastWriteTime -ge $cutoff })
   foreach ($file in $recent) {
     $target = Join-Path $Destination $file.Name
     if ((Test-Path $target) -and ((Get-Item $target).Length -eq $file.Length)) { continue }
-    if ($DryRun) { Write-Log "would copy: $($file.Name)"; $copied++; continue }
+    if ($DryRun) { Write-Log "would copy: $($file.Name)"; $newlyCopied += $file.Name; $copied++; continue }
     Copy-Item -Path $file.FullName -Destination $target -Force
     if ((Get-FileHash $file.FullName -Algorithm SHA256).Hash -ne (Get-FileHash $target -Algorithm SHA256).Hash) {
       Remove-Item $target -Force
@@ -78,16 +79,21 @@ try {
     $copied++
   }
 
-  # 2. Rotation: delete destination backups older than N days (by modification
-  #    time, which Copy-Item preserves). Safety net: prune nothing when the
-  #    destination holds no recent backup, so a stalled sidecar never empties it.
-  $onDest = @(Get-BackupFiles $Destination)
-  $recentOnDest = @($onDest | Where-Object { $_.LastWriteTime -ge $cutoff }).Count
-  if ($DryRun) { $recentOnDest += $copied }
+  # 2. Rotation, per file type (*.sqlite, *.tar.gz): delete destination files older
+  #    than N days (by modification time, which Copy-Item preserves). Safety net:
+  #    prune a type only when the destination holds a recent file of that same type,
+  #    so a stalled sidecar step (e.g. photo archives) never empties it.
   $deleted = 0
-  if ($recentOnDest -eq 0) {
-    Write-Log "WARNING: no backup younger than $RetentionDays days, rotation skipped."
-  } else {
+  $recentOnDest = 0
+  foreach ($pattern in $Patterns) {
+    $onDest = @(Get-ChildItem -Path $Destination -Filter $pattern -File -ErrorAction SilentlyContinue)
+    $recentCount = @($onDest | Where-Object { $_.LastWriteTime -ge $cutoff }).Count
+    if ($DryRun) { $recentCount += @($newlyCopied | Where-Object { $_ -like $pattern }).Count }
+    $recentOnDest += $recentCount
+    if ($recentCount -eq 0) {
+      Write-Log "WARNING: no $pattern backup younger than $RetentionDays days, rotation skipped for this type."
+      continue
+    }
     foreach ($old in ($onDest | Where-Object { $_.LastWriteTime -lt $cutoff })) {
       if ($DryRun) { Write-Log "would delete: $($old.Name)"; $deleted++; continue }
       Remove-Item -Path $old.FullName -Force

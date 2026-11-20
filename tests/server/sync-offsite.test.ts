@@ -68,11 +68,15 @@ describe.skipIf(!shell)('sync-backups-offsite.ps1', () => {
 
 	it('rotates old files at the destination', () => {
 		put(src, 'apogee-20261120T030000Z.sqlite', 1);
+		put(src, 'apogee-photos-20261120T030000Z.tar.gz', 1);
 		put(dst, 'apogee-20261101T030000Z.sqlite', 19);
 		put(dst, 'apogee-photos-20261101T030000Z.tar.gz', 19);
 		const r = run(base());
 		expect(r.status, r.stdout + r.stderr).toBe(0);
-		expect(readdirSync(dst)).toEqual(['apogee-20261120T030000Z.sqlite']);
+		expect(readdirSync(dst).sort()).toEqual([
+			'apogee-20261120T030000Z.sqlite',
+			'apogee-photos-20261120T030000Z.tar.gz'
+		]);
 	});
 
 	it('safety net: deletes nothing when the destination has no recent file', () => {
@@ -85,6 +89,33 @@ describe.skipIf(!shell)('sync-backups-offsite.ps1', () => {
 			'apogee-photos-20261101T030000Z.tar.gz'
 		]);
 		expect(r.stdout).toContain('rotation skipped');
+	});
+
+	it('safety net is per type: recent sqlite only does not allow pruning old tar.gz', () => {
+		put(src, 'apogee-20261120T030000Z.sqlite', 1);
+		put(dst, 'apogee-photos-20261101T030000Z.tar.gz', 19);
+		put(dst, 'apogee-20261101T030000Z.sqlite', 19);
+		const r = run(base());
+		expect(r.status, r.stdout + r.stderr).toBe(0);
+		expect(readdirSync(dst).sort()).toEqual([
+			'apogee-20261120T030000Z.sqlite',
+			'apogee-photos-20261101T030000Z.tar.gz'
+		]);
+		expect(r.stdout).toContain('WARNING');
+		expect(r.stdout).toContain('*.tar.gz');
+	});
+
+	it('leaves foreign files in the destination alone', () => {
+		put(src, 'apogee-20261120T030000Z.sqlite', 1);
+		put(dst, 'notes.txt', 30);
+		put(dst, 'x.sqlite.bak', 30);
+		const r = run(base());
+		expect(r.status, r.stdout + r.stderr).toBe(0);
+		expect(readdirSync(dst).sort()).toEqual([
+			'apogee-20261120T030000Z.sqlite',
+			'notes.txt',
+			'x.sqlite.bak'
+		]);
 	});
 
 	it('missing source folder: nothing to copy, exit 0', () => {
