@@ -1,9 +1,11 @@
 <script lang="ts">
+  import { afterNavigate, invalidateAll } from '$app/navigation';
   import { page } from '$app/state';
   import CloudArrowUp from 'phosphor-svelte/lib/CloudArrowUp';
   import * as m from '$paraglide/messages';
   import BottomNav from '$lib/components/BottomNav.svelte';
   import { pendingCount, startSyncLoop } from '$lib/offline/pending.svelte';
+  import { reloadAfterColdStart } from '$lib/offline/page-cache';
   import { becomeActiveUser } from '$lib/offline/session';
 
   let { children } = $props();
@@ -16,6 +18,12 @@
   // Sends the gestures recorded offline as soon as the network allows.
   $effect(() => {
     if (typeof userId === 'number') return startSyncLoop(userId);
+  });
+  // Cold start: the data built into the HTML may come from an older copy than the cached
+  // __data.json (see reloadAfterColdStart). Reload it once.
+  afterNavigate(({ type, to }) => {
+    if (type !== 'enter' || !to) return;
+    void reloadAfterColdStart(to.url, location.origin, { invalidate: invalidateAll, fetch }).catch(() => {});
   });
   const waiting = $derived(pendingCount());
 </script>

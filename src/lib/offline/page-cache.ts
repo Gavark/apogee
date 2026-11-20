@@ -107,6 +107,50 @@ export function offlineRedirectFor(url: Pick<URL, 'origin' | 'pathname'>, origin
   return url.origin === origin && url.pathname === '/' ? '/app' : null;
 }
 
+/** The `__data.json` request of a page, with the page's own parameters. */
+export function dataUrlFor(url: URL): URL {
+  const data = new URL(url.href);
+  data.pathname = url.pathname.replace(/\/$/, '') + DATA_SUFFIX;
+  return data;
+}
+
+/**
+ * Whether PAGE_CACHE holds a copy of the page's data able to answer a full reload (every node).
+ * A partial copy (nodes skipped by a client-side navigation) or none: a reload could fail offline.
+ */
+export async function hasFullDataCopy(url: URL, origin: string): Promise<boolean> {
+  if (typeof caches === 'undefined' || !caches || !isOfflineReadable(url, origin)) return false;
+  try {
+    const cache = await caches.open(PAGE_CACHE);
+    const hit = await cache.match(new URL(cacheKeyFor(dataUrlFor(url)), origin).href, { ignoreVary: true });
+    return hit !== undefined && dataBodyToServe(await hit.text(), null) !== null;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * After a cold start on a reading page: the page hydrated from the data built into its HTML, which
+ * the service worker may have served from a copy kept at the last full load, older than the copy of
+ * its __data.json (refreshed by every reload and navigation). Reloads the data once: online it comes
+ * fresh and refreshes that copy, so it is never older than the HTML; offline the copy answers.
+ * Without a full copy, the data is fetched first (the service worker keeps it): offline that fails
+ * and nothing is reloaded, as the reload would end on an error page; the HTML is the newest there is.
+ */
+export async function reloadAfterColdStart(
+  url: URL,
+  origin: string,
+  deps: { invalidate: () => Promise<void>; fetch: typeof fetch }
+): Promise<void> {
+  if (!isOfflineReadable(url, origin)) return;
+  if (!(await hasFullDataCopy(url, origin))) {
+    const doFetch = deps.fetch; // a local: `deps.fetch(...)` would call window.fetch with the wrong `this`
+    const res = await doFetch(dataUrlFor(url), { credentials: 'same-origin' }).catch(() => null);
+    if (!res?.ok) return;
+  }
+  await deps.invalidate();
+}
+
 /** Drops every cached page (logout, another account). Works from a page and from the service worker. */
 export async function clearPageCache(): Promise<void> {
   if (typeof caches === 'undefined') return;

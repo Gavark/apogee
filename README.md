@@ -53,12 +53,12 @@ Apogée est une PWA : une fois installée, elle reste utilisable sans réseau (c
 
 **Ce qui marche hors ligne**
 
-- Consulter « Quoi ouvrir », la cave et les fiches déjà vues (copie gardée par le service worker, propre à chaque compte).
+- Ouvrir l'appli installée et consulter « Quoi ouvrir », la cave et les fiches déjà vues (copie gardée par le service worker, propre à chaque compte). À l'ouverture, l'écran recharge ses données depuis la copie la plus récente : celle des derniers gestes, pas seulement celle du dernier chargement complet.
 - Les gestes de stock : Bue, +/−, déplacer, annuler. Ils s'affichent tout de suite, sont mis en file sur l'appareil et un indicateur compte les gestes en attente.
 
 **Ce qui nécessite le réseau** : ajout et modification d'un vin, lieux, compte (mot de passe, sessions), foyer, notifications, analyse IA de l'étiquette, administration. Ces écrans affichent « Cet écran nécessite le réseau » et désactivent l'envoi tant que l'appareil est hors ligne.
 
-**Synchronisation automatique** : les gestes en attente partent au retour du réseau, au retour sur l'appli, toutes les 30 s et, selon les navigateurs, via Background Sync (Chrome, Edge, Android : oui ; Safari et iOS : non, la synchronisation se fait alors à la réouverture de l'appli).
+**Synchronisation automatique** : les gestes en attente partent au retour du réseau, au retour sur l'appli, toutes les 30 s et, selon les navigateurs, via Background Sync (Chrome, Edge, Android : oui, même appli fermée ; Safari et iOS : non, les gestes ne partent que lorsque l'appli est ouverte).
 
 **Bandeau « Hors ligne »** : quand un écran vient de la copie locale, il indique la date des données affichées.
 

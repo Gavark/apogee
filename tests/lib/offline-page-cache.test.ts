@@ -1,9 +1,13 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
+  PAGE_CACHE,
   cacheKeyFor,
   dataBodyToServe,
   dataBodyToStore,
+  dataUrlFor,
+  hasFullDataCopy,
   isOfflineReadable,
+  reloadAfterColdStart,
   isStorable,
   offlineRedirectFor
 } from '$lib/offline/page-cache';
@@ -185,5 +189,98 @@ describe('offlineRedirectFor', () => {
 
   it('autre origine → aucune redirection', () => {
     expect(offlineRedirectFor(u('/', 'https://evil.example'), ORIGIN)).toBeNull();
+  });
+});
+
+describe('dataUrlFor', () => {
+  it('ajoute /__data.json au chemin et garde les paramètres de la page', () => {
+    expect(dataUrlFor(u('/app')).href).toBe(`${ORIGIN}/app/__data.json`);
+    expect(dataUrlFor(u('/app/cave?phase=ready')).href).toBe(`${ORIGIN}/app/cave/__data.json?phase=ready`);
+    expect(dataUrlFor(u('/app/wines/12/')).href).toBe(`${ORIGIN}/app/wines/12/__data.json`);
+  });
+
+  it('même clé de cache que la requête de données de SvelteKit', () => {
+    const fromSvelteKit = u('/app/cave/__data.json?q=x&x-sveltekit-invalidated=11');
+    expect(cacheKeyFor(dataUrlFor(u('/app/cave?q=x')))).toBe(cacheKeyFor(fromSvelteKit));
+  });
+});
+
+/** A fake CacheStorage holding PAGE_CACHE with `entries` (cache key → body). */
+function stubCaches(entries: Record<string, string>) {
+  const open = vi.fn(async (name: string) => ({
+    match: async (key: string) => {
+      if (name !== PAGE_CACHE) return undefined;
+      const path = new URL(key).pathname + new URL(key).search;
+      return path in entries ? new Response(entries[path]) : undefined;
+    }
+  }));
+  vi.stubGlobal('caches', { open });
+}
+
+describe('hasFullDataCopy', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('copie complète des données de la page → true', async () => {
+    stubCaches({ '/app/cave/__data.json?q=x': data([node('layout'), null, node('page')]) });
+    await expect(hasFullDataCopy(u('/app/cave?q=x'), ORIGIN)).resolves.toBe(true);
+  });
+
+  it('pas de copie → false (rien à recharger : la page affichée est la plus récente)', async () => {
+    stubCaches({});
+    await expect(hasFullDataCopy(u('/app'), ORIGIN)).resolves.toBe(false);
+  });
+
+  it('copie partielle (layout sauté par une navigation) → false : hors ligne, le rechargement complet échouerait', async () => {
+    stubCaches({ '/app/__data.json': data([SKIP, node('page')]) });
+    await expect(hasFullDataCopy(u('/app'), ORIGIN)).resolves.toBe(false);
+  });
+
+  it('pas une page de lecture ou pas de Cache Storage → false', async () => {
+    stubCaches({ '/account/__data.json': data([node('x')]) });
+    await expect(hasFullDataCopy(u('/account'), ORIGIN)).resolves.toBe(false);
+    vi.stubGlobal('caches', undefined);
+    await expect(hasFullDataCopy(u('/app'), ORIGIN)).resolves.toBe(false);
+  });
+});
+
+describe('reloadAfterColdStart', () => {
+  afterEach(() => vi.unstubAllGlobals());
+  const deps = (fetchImpl: () => Promise<Response>) => ({
+    invalidate: vi.fn(async () => {}),
+    fetch: vi.fn(fetchImpl) as unknown as typeof fetch
+  });
+
+  it('copie complète → recharge les données (en ligne : fraîches ; hors ligne : la copie), sans requête de plus', async () => {
+    stubCaches({ '/app/__data.json': data([node('layout'), node('page')]) });
+    const d = deps(async () => new Response('{}'));
+    await reloadAfterColdStart(u('/app'), ORIGIN, d);
+    expect(d.invalidate).toHaveBeenCalledTimes(1);
+    expect(d.fetch).not.toHaveBeenCalled();
+  });
+
+  it('pas de copie complète, réseau là → lit les données une fois (le service worker les garde) puis recharge', async () => {
+    stubCaches({ '/app/cave/__data.json': data([SKIP, node('page')]) });
+    const d = deps(async () => new Response('{}'));
+    await reloadAfterColdStart(u('/app/cave?q=x'), ORIGIN, d);
+    expect(String((d.fetch as unknown as ReturnType<typeof vi.fn>).mock.calls[0][0])).toBe(`${ORIGIN}/app/cave/__data.json?q=x`);
+    expect(d.invalidate).toHaveBeenCalledTimes(1);
+  });
+
+  it('pas de copie complète et pas de réseau (ou erreur) → ne recharge pas : la page affichée reste, pas de page d’erreur', async () => {
+    stubCaches({});
+    const offline = deps(async () => Promise.reject(new TypeError('Failed to fetch')));
+    await reloadAfterColdStart(u('/app'), ORIGIN, offline);
+    expect(offline.invalidate).not.toHaveBeenCalled();
+    const failing = deps(async () => new Response('{}', { status: 503 }));
+    await reloadAfterColdStart(u('/app'), ORIGIN, failing);
+    expect(failing.invalidate).not.toHaveBeenCalled();
+  });
+
+  it('page qui n’est pas de lecture → rien', async () => {
+    stubCaches({});
+    const d = deps(async () => new Response('{}'));
+    await reloadAfterColdStart(u('/app/locations'), ORIGIN, d);
+    expect(d.fetch).not.toHaveBeenCalled();
+    expect(d.invalidate).not.toHaveBeenCalled();
   });
 });
