@@ -23,6 +23,14 @@ it('docker-publish.yml : image gavark/apogee, amd64 + arm64 natifs, tags v* et m
   expect(publish).toContain('type=raw,value=latest,enable={{is_default_branch}}');
 });
 
+it('docker-publish.yml : un job test (check + test) conditionne le build', () => {
+  expect(publish).toMatch(/jobs:\n(?:.*\n)*?  test:\n/);
+  expect(publish).toContain('npm ci --ignore-scripts');
+  for (const cmd of ['npm run check', 'npm test']) expect(publish).toContain(cmd);
+  expect(publish).toMatch(/node-version: '22'/);
+  expect(publish).toMatch(/\n {2}build:\n {4}needs: test\n/);
+});
+
 it('release.yml : se déclenche sur les tags v*', () => {
   expect(release).toMatch(/push:\s*\n\s*tags: \['v\*'\]/);
   expect(release).toContain('gh release create');

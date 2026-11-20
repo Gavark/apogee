@@ -89,7 +89,7 @@ export const handle: Handle = async ({ event, resolve }) => {
   // account, in attemptLogin.
   if ((path === '/login' || path === '/signup') && event.request.method === 'POST') {
     const ip = event.getClientAddress();
-    const limit = path === '/login' ? 30 : 5;
+    const limit = path === '/login' ? 30 : 20;
     if (!rateLimit(`${path}:${ip}`, limit, 15 * 60)) {
       // No session lookup yet, so the locale comes from the same chain as
       // below minus the user preference (?lang, cookie, Accept-Language).

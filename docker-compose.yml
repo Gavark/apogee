@@ -27,6 +27,11 @@ services:
       - TZ=${TZ:-Europe/Paris}
       - PROTOCOL_HEADER=x-forwarded-proto
       - HOST_HEADER=x-forwarded-host
+      # Behind the reverse proxy on 127.0.0.1: take the client IP from the last
+      # X-Forwarded-For entry (the one Caddy appends). Remove both lines if the
+      # container is exposed directly, without a reverse proxy.
+      - ADDRESS_HEADER=x-forwarded-for
+      - XFF_DEPTH=1
     volumes:
       - ./data:/data
     healthcheck:

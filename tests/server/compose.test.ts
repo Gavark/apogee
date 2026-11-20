@@ -12,6 +12,11 @@ it('docker-compose monte /data et transmet ORIGIN, ADMIN_EMAIL, ADMIN_PASSWORD, 
   expect(compose).toMatch(/healthcheck:/);
 });
 
+it('docker-compose lit la vraie IP cliente derrière le proxy (ADDRESS_HEADER + XFF_DEPTH=1)', () => {
+  expect(compose).toContain('- ADDRESS_HEADER=x-forwarded-for');
+  expect(compose).toContain('- XFF_DEPTH=1');
+});
+
 it("docker-compose n'expose pas DISABLE_SIGNUP (inscription sur invitation uniquement)", () => {
   expect(compose).not.toContain('DISABLE_SIGNUP');
 });
