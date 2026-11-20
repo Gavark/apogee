@@ -331,6 +331,7 @@
   "add_ai_error_invalid_photo": "Photo illisible ou trop lourde — essayez-en une autre.",
   "add_ai_stale": "Cette analyse n'est plus valable : reprenez la photo.",
   "add_ai_window_title": "Proposé par l'IA",
+  "add_ai_window_title_conf": "Proposé par l'IA ({confidence})",
   "add_ai_confidence_low": "confiance faible",
   "add_ai_confidence_medium": "confiance moyenne",
   "add_ai_confidence_high": "confiance élevée",

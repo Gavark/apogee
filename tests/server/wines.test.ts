@@ -206,6 +206,15 @@ describe('wines (db)', () => {
     expect(() => addStock(tdb.db, ctx, wineId, lot({ quantity: 0 }))).toThrow();
   });
 
+  it("addStock sur le vin d'un autre foyer → NotFoundError, photo non attachée", () => {
+    const { wineId } = createWine(tdb.db, ctx, wine(), lot());
+    expect(() => addStock(tdb.db, otherCtx, wineId, { locationId: otherLoc, position: '', quantity: 1 }, '2/x.jpg')).toThrow(
+      NotFoundError
+    );
+    expect(rowOf(wineId).labelPhoto).toBeNull();
+    expect(count('stockLots')).toBe(1);
+  });
+
   it('updateWine met à jour les champs et recalcule identityKey', () => {
     const { wineId } = createWine(tdb.db, ctx, wine(), lot());
     updateWine(tdb.db, ctx, wineId, wine({ cuvee: 'Pavillon Rouge', window: win(2020, 2035) }));

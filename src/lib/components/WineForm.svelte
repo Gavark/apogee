@@ -115,7 +115,7 @@
   </div>
   {#if showAiReminder}
     <p class="ai" role="note">
-      <strong>{m.add_ai_window_title()}{confidenceLabel ? ` (${confidenceLabel})` : ''}</strong>
+      <strong>{confidenceLabel ? m.add_ai_window_title_conf({ confidence: confidenceLabel }) : m.add_ai_window_title()}</strong>
       {#if aiRationale}<span>{aiRationale}</span>{/if}
       <span>{m.add_ai_window_check()}</span>
     </p>

@@ -70,6 +70,11 @@
       : {}
   );
 
+  // A rejected analysis id (foreign or stale) must not be resent: the retry saves as a manual entry.
+  $effect(() => {
+    if (error?.field === 'analysisId' && captured && captured.analysisId !== null) captured.analysisId = null;
+  });
+
   function revoke() {
     if (captured) URL.revokeObjectURL(captured.preview);
   }
@@ -167,6 +172,7 @@
         </Card>
       {/if}
 
+      {#if error?.field === 'analysisId'}<Card role="alert"><p class="msg">{error.message}</p></Card>{/if}
       {#if captured?.analysisId != null}
         <input type="hidden" name="analysisId" value={captured.analysisId} />
       {/if}
@@ -235,7 +241,7 @@
   .group { display: grid; gap: var(--s-3); border: 0; padding: 0; margin: 0; min-width: 0; }
   legend { font-size: var(--fs-lg); font-weight: var(--fw-semibold); padding: 0; margin-bottom: var(--s-3); }
   .photo { display: flex; align-items: center; gap: var(--s-3); }
-  .photo img { width: 96px; height: 96px; object-fit: cover; border-radius: var(--r-md, 8px); border: 1px solid var(--c-border, currentColor); }
+  .photo img { width: 96px; height: 96px; object-fit: cover; border-radius: var(--r-control); border: 1px solid var(--c-border); }
   .msg { margin: 0; }
   .dup h2 { margin: 0 0 var(--s-1); font-size: var(--fs-lg); }
   .dup p { margin: 0 0 var(--s-3); color: var(--c-text-muted); }

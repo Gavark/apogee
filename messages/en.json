@@ -331,6 +331,7 @@
   "add_ai_error_invalid_photo": "Photo unreadable or too large — try another one.",
   "add_ai_stale": "This analysis is no longer valid: take the photo again.",
   "add_ai_window_title": "Suggested by AI",
+  "add_ai_window_title_conf": "Suggested by AI ({confidence})",
   "add_ai_confidence_low": "low confidence",
   "add_ai_confidence_medium": "medium confidence",
   "add_ai_confidence_high": "high confidence",
