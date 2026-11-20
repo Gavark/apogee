@@ -1,0 +1,54 @@
+# syntax=docker/dockerfile:1.7
+
+FROM node:22-alpine AS deps
+WORKDIR /app
+COPY package.json package-lock.json ./
+# --ignore-scripts: better-sqlite3 ships prebuilt binaries (linuxmusl included)
+# but also a binding.gyp, and npm ci would run `node-gyp rebuild` for it.
+# Alpine has no Python, so that fails. No dependency needs an install script.
+RUN npm ci --ignore-scripts
+
+FROM node:22-alpine AS build
+WORKDIR /app
+COPY --from=deps /app/node_modules ./node_modules
+COPY . .
+# Create /data so SvelteKit post-build analysis can open the DB during analyse phase
+RUN mkdir -p /data && DATABASE_PATH=/data/build-probe.sqlite npm run build && rm -f /data/build-probe.sqlite
+
+FROM node:22-alpine AS runtime
+WORKDIR /app
+# production: secure cookies, and /dev/styleguide answers 404
+ENV NODE_ENV=production
+ENV DATABASE_PATH=/data/apogee.sqlite
+ENV PORT=3000
+
+# Production deps only
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev --ignore-scripts && npm cache clean --force
+
+# Built app + migrations
+COPY --from=build /app/build ./build
+COPY drizzle ./drizzle
+# Copy the whole db directory so migrate.ts relative imports (./index, ./schema) resolve correctly
+COPY src/lib/server/db ./src/lib/server/db
+
+# Migrate at startup then run
+COPY <<'EOF2' /app/start.sh
+#!/bin/sh
+set -e
+node --import tsx /app/src/lib/server/db/migrate.ts
+exec node /app/build/index.js
+EOF2
+RUN chmod +x /app/start.sh
+
+# Pre-create /data with correct ownership so 'node' user can write to it at runtime
+RUN mkdir -p /data && chown node:node /data
+
+RUN apk add --no-cache sqlite
+
+USER node
+EXPOSE 3000
+HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
+  CMD wget --quiet --tries=1 --spider http://127.0.0.1:3000/healthz || exit 1
+
+CMD ["/app/start.sh"]
