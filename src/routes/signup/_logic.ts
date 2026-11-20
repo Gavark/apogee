@@ -3,7 +3,7 @@ import { eq } from 'drizzle-orm';
 import * as schema from '$lib/server/db/schema';
 import { hashPassword, isStrongEnough } from '$lib/server/auth/password';
 import { findUsableInvitation, markInvitationUsed } from '$lib/server/auth/invitations';
-import { MAX_HOUSEHOLD_NAME_LEN } from '../setup/_logic';
+import { MAX_HOUSEHOLD_NAME_LEN } from '$lib/server/households';
 import { normalizeEmail, isValidEmail } from '$lib/server/auth/email';
 
 type DB = ReturnType<typeof drizzle<typeof schema>>;

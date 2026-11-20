@@ -2,9 +2,8 @@ import type { drizzle } from 'drizzle-orm/better-sqlite3';
 import * as schema from '$lib/server/db/schema';
 import { hashPassword, isStrongEnough } from '$lib/server/auth/password';
 import { hasNoUsers, insertHouseholdAndAdmin } from '$lib/server/auth/bootstrap';
+import { MAX_HOUSEHOLD_NAME_LEN } from '$lib/server/households';
 import { normalizeEmail, isValidEmail } from '$lib/server/auth/email';
-
-export const MAX_HOUSEHOLD_NAME_LEN = 100;
 
 type DB = ReturnType<typeof drizzle<typeof schema>>;
 

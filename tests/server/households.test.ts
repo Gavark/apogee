@@ -5,7 +5,8 @@ import {
   listMembers,
   listHouseholdsForAdmin,
   deleteUserAsAdmin,
-  deleteHouseholdAsAdmin
+  deleteHouseholdAsAdmin,
+  adminInvitationRows
 } from '../../src/lib/server/households';
 import type { HouseholdCtx } from '../../src/lib/server/context';
 
@@ -104,5 +105,27 @@ describe('households', () => {
     expect(count('stock_lots')).toBe(0);
     expect(count('invitations')).toBe(0);
     expect(count('locations')).toBe(1);
+  });
+
+  it('adminInvitationRows: lien pour sans-foyer et foyer propre, jamais le token des autres foyers', () => {
+    const now = 1000;
+    const inv = (id: number, householdId: number | null, extra: object = {}) => ({
+      id, token: `secret-${id}`, householdId, usedAt: null, expiresAt: now + 100, ...extra
+    });
+    const rows = adminInvitationRows(
+      [inv(1, null), inv(2, hidA), inv(3, hidB), inv(4, hidA, { usedAt: 5 }), inv(5, null, { expiresAt: now - 1 })],
+      new Map([[hidA, 'Foyer A'], [hidB, 'Foyer B']]),
+      hidA,
+      'http://x.test',
+      now
+    );
+    const byId = new Map(rows.map((r) => [r.id, r]));
+    expect(byId.get(1)!.link).toBe('http://x.test/signup?token=secret-1');
+    expect(byId.get(2)!.link).toBe('http://x.test/signup?token=secret-2');
+    expect(byId.get(3)).toEqual({ id: 3, householdName: 'Foyer B', status: 'pending', expiresAt: now + 100, link: null });
+    expect(byId.get(4)!.link).toBeNull();
+    expect(byId.get(4)!.status).toBe('used');
+    expect(byId.get(5)!.status).toBe('expired');
+    expect(JSON.stringify(rows)).not.toContain('secret-3');
   });
 });

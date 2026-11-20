@@ -4,6 +4,7 @@ import { getDb } from '$lib/server/db';
 import { requireCtx, type HouseholdCtx } from '$lib/server/context';
 import { createInvitation, listInvitations } from '$lib/server/auth/invitations';
 import {
+  adminInvitationRows,
   listHouseholdsForAdmin,
   listMembers,
   deleteUserAsAdmin,
@@ -23,19 +24,12 @@ export const load: PageServerLoad = ({ locals, url }) => {
   const { db } = getDb();
   const households = listHouseholdsForAdmin(db);
   const nameById = new Map(households.map((h) => [h.id, h.name]));
-  const now = Math.floor(Date.now() / 1000);
   return {
     currentUserId: ctx.userId,
     ownHouseholdId: ctx.householdId,
     // Names, members and counts only: the cellars themselves stay private.
     households: households.map((h) => ({ ...h, members: listMembers(db, h.id) })),
-    invitations: listInvitations(db, null).map((inv) => ({
-      id: inv.id,
-      householdName: inv.householdId === null ? null : (nameById.get(inv.householdId) ?? null),
-      status: inv.usedAt ? ('used' as const) : inv.expiresAt <= now ? ('expired' as const) : ('pending' as const),
-      expiresAt: inv.expiresAt,
-      link: `${url.origin}/signup?token=${inv.token}`
-    }))
+    invitations: adminInvitationRows(listInvitations(db, null), nameById, ctx.householdId, url.origin)
   };
 };
 

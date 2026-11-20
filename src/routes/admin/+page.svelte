@@ -117,7 +117,7 @@
                   <span class="muted">{m.invite_expires({ when: formatDate(inv.expiresAt, data.locale) })}</span>
                 {/if}
               </p>
-              {#if inv.status === 'pending'}<CopyLink url={inv.link} />{/if}
+              {#if inv.link}<CopyLink url={inv.link} />{/if}
             </Card>
           </li>
         {/each}

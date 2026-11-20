@@ -5,6 +5,8 @@ import type { HouseholdCtx } from './context';
 
 type DB = BaseSQLiteDatabase<'sync', unknown, typeof schema>;
 
+export const MAX_HOUSEHOLD_NAME_LEN = 100;
+
 export type Member = { id: number; email: string; isAdmin: boolean; createdAt: number };
 export type HouseholdSummary = { id: number; name: string; memberCount: number; createdAt: number };
 
@@ -69,5 +71,39 @@ export function deleteHouseholdAsAdmin(
     tx.delete(schema.wines).where(eq(schema.wines.householdId, householdId)).run();
     tx.delete(schema.households).where(eq(schema.households.id, householdId)).run();
     return { ok: true as const };
+  });
+}
+
+export type AdminInvitationRow = {
+  id: number;
+  householdName: string | null;
+  status: 'pending' | 'used' | 'expired';
+  expiresAt: number;
+  /** Only for household-less invitations or the admin's own household. */
+  link: string | null;
+};
+
+/**
+ * What the instance admin may see of invitations. A household-bound token lets
+ * its holder join that household and read its cellar, so the token and link
+ * are withheld for every household but the admin's own.
+ */
+export function adminInvitationRows(
+  invitations: { id: number; token: string; householdId: number | null; usedAt: number | null; expiresAt: number }[],
+  householdNames: Map<number, string>,
+  ownHouseholdId: number,
+  origin: string,
+  now: number = Math.floor(Date.now() / 1000)
+): AdminInvitationRow[] {
+  return invitations.map((inv) => {
+    const status = inv.usedAt ? 'used' : inv.expiresAt <= now ? 'expired' : 'pending';
+    const visible = inv.householdId === null || inv.householdId === ownHouseholdId;
+    return {
+      id: inv.id,
+      householdName: inv.householdId === null ? null : (householdNames.get(inv.householdId) ?? null),
+      status,
+      expiresAt: inv.expiresAt,
+      link: visible && status === 'pending' ? `${origin}/signup?token=${inv.token}` : null
+    };
   });
 }
