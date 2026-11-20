@@ -42,6 +42,8 @@ export function wineErrorMessage(e: WineInputError): string {
       return m.form_err_quantity_invalid();
     case 'locationId':
       return m.form_err_location_invalid();
+    case 'analysisId':
+      return m.add_ai_stale();
     case 'cuvee':
     case 'appellation':
     case 'region':

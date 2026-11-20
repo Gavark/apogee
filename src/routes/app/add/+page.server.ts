@@ -2,6 +2,7 @@ import { fail } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
 import { getDb } from '$lib/server/db';
 import { requireCtx } from '$lib/server/context';
+import { getAiProvider } from '$lib/server/ai/config';
 import { getWineDetail } from '$lib/server/wines';
 import { currentYear } from '$lib/phase';
 import { wineErrorMessage } from '$lib/wine-labels';
@@ -14,7 +15,7 @@ export const load: PageServerLoad = async ({ locals, cookies, parent }) => {
   const { locations } = await parent();
   const last = Number(cookies.get(LAST_LOCATION_COOKIE));
   const locationId = locations.some((l) => l.id === last) ? last : (locations[0]?.id ?? null);
-  return { locationId, year: currentYear(locals.user!.timezone) };
+  return { locationId, year: currentYear(locals.user!.timezone), aiEnabled: getAiProvider() !== null };
 };
 
 export const actions: Actions = {

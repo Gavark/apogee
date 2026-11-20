@@ -4,6 +4,7 @@ import * as schema from './db/schema';
 import { NotFoundError, type HouseholdCtx } from './context';
 import type { Wine } from './db/schema';
 import { cleanupQuietly, deletePhoto, photosDir } from './photos';
+import type { AiConfidence } from './ai/types';
 import {
   HOME_SECTION_ORDER,
   computePhase,
@@ -32,6 +33,16 @@ export type WineInput = {
   acquiredYear: number | null;
   window: WindowYears;
   notes: string | null;
+};
+
+/** What an accepted label analysis contributes to a new wine. */
+export type AiProvenance = {
+  analysisId: number;
+  photoPath: string | null;
+  window: WindowYears | null;
+  confidence: AiConfidence | null;
+  rationale: string | null;
+  model: string | null;
 };
 
 export type LotInput = { locationId: number; position: string; quantity: number };
@@ -197,13 +208,28 @@ function upsertLot(db: DB, wineId: number, lot: LotInput): number {
     .get().id;
 }
 
+/** Strict field-by-field equality (null equals null). */
+function sameWindow(a: WindowYears, b: WindowYears): boolean {
+  return (
+    a.drinkFrom === b.drinkFrom && a.peakFrom === b.peakFrom && a.peakTo === b.peakTo && a.drinkUntil === b.drinkUntil
+  );
+}
+
+const hasYears = (w: WindowYears) =>
+  w.drinkFrom !== null || w.peakFrom !== null || w.peakTo !== null || w.drinkUntil !== null;
+
+const NO_AI = { aiConfidence: null, aiRationale: null, aiModel: null, aiAnalyzedAt: null } as const;
+
 export function createWine(
   db: DB,
   ctx: HouseholdCtx,
   input: WineInput,
-  lot: LotInput
+  lot: LotInput,
+  provenance: AiProvenance | null = null
 ): { wineId: number; lotId: number } {
   assertQuantity(lot.quantity);
+  // The window counts as the AI's only when it was proposed and kept as is.
+  const fromAi = !!provenance?.window && hasYears(provenance.window) && sameWindow(provenance.window, input.window);
   return db.transaction((tx) => {
     assertOwnedLocation(tx, ctx, lot.locationId);
     const wineId = tx
@@ -211,7 +237,16 @@ export function createWine(
       .values({
         ...wineColumns(input),
         householdId: ctx.householdId,
-        windowSource: 'manual',
+        windowSource: fromAi ? 'ai' : 'manual',
+        ...(fromAi
+          ? {
+              aiConfidence: provenance!.confidence,
+              aiRationale: provenance!.rationale,
+              aiModel: provenance!.model,
+              aiAnalyzedAt: Math.floor(Date.now() / 1000)
+            }
+          : NO_AI),
+        labelPhoto: provenance?.photoPath ?? null,
         createdBy: ctx.userId
       })
       .returning({ id: wines.id })
@@ -220,20 +255,38 @@ export function createWine(
   });
 }
 
-export function addStock(db: DB, ctx: HouseholdCtx, wineId: number, lot: LotInput): { lotId: number } {
+/** `photoPath` is attached only when the wine has no photo yet. */
+export function addStock(
+  db: DB,
+  ctx: HouseholdCtx,
+  wineId: number,
+  lot: LotInput,
+  photoPath: string | null = null
+): { lotId: number } {
   assertQuantity(lot.quantity);
   return db.transaction((tx) => {
-    findOwnedWine(tx, ctx, wineId);
+    const wine = findOwnedWine(tx, ctx, wineId);
     assertOwnedLocation(tx, ctx, lot.locationId);
+    if (photoPath && !wine.labelPhoto)
+      tx.update(wines)
+        .set({ labelPhoto: photoPath })
+        .where(and(eq(wines.id, wineId), eq(wines.householdId, ctx.householdId)))
+        .run();
     return { lotId: upsertLot(tx, wineId, lot) };
   });
 }
 
 export function updateWine(db: DB, ctx: HouseholdCtx, wineId: number, input: WineInput): void {
   db.transaction((tx) => {
-    findOwnedWine(tx, ctx, wineId);
+    const current = findOwnedWine(tx, ctx, wineId);
+    // An untouched window keeps its provenance; any change makes it the user's own. The photo stays.
+    const unchanged = sameWindow(windowOf(current), input.window);
     tx.update(wines)
-      .set({ ...wineColumns(input), windowSource: 'manual', updatedAt: Math.floor(Date.now() / 1000) })
+      .set({
+        ...wineColumns(input),
+        ...(unchanged ? {} : { windowSource: 'manual' as const, ...NO_AI }),
+        updatedAt: Math.floor(Date.now() / 1000)
+      })
       .where(and(eq(wines.id, wineId), eq(wines.householdId, ctx.householdId)))
       .run();
   });

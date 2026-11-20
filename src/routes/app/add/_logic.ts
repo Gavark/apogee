@@ -1,9 +1,11 @@
 import type { BaseSQLiteDatabase } from 'drizzle-orm/sqlite-core';
 import type * as schema from '$lib/server/db/schema';
+import { getOwnedAnalysis } from '$lib/server/label-analyses';
 import { NotFoundError, type HouseholdCtx } from '$lib/server/context';
 import {
   addStock,
   createWine,
+  type AiProvenance,
   findDuplicate,
   validateParsedWine,
   MAX_LOT_QUANTITY,
@@ -80,15 +82,38 @@ export function submitAddWine(db: DB, ctx: HouseholdCtx, form: FormData, year: n
     return { ok: false, error: { field: 'quantity', reason: 'invalid' } };
   if (!Number.isSafeInteger(lot.locationId)) return { ok: false, error: { field: 'locationId', reason: 'invalid' } };
 
+  // Optional: the analysis this wine was pre-filled from. One of another household looks like a bad value.
+  let provenance: AiProvenance | null = null;
+  const rawAnalysisId = text(form, 'analysisId');
+  if (rawAnalysisId !== null) {
+    const id = Number(rawAnalysisId);
+    if (!/^\d+$/.test(rawAnalysisId) || !Number.isSafeInteger(id))
+      return { ok: false, error: { field: 'analysisId', reason: 'invalid' } };
+    try {
+      const a = getOwnedAnalysis(db, ctx, id);
+      provenance = {
+        analysisId: a.id,
+        photoPath: a.photoPath,
+        window: a.analysis?.window ?? null,
+        confidence: a.analysis?.confidence ?? null,
+        rationale: a.analysis?.rationale ?? null,
+        model: a.model
+      };
+    } catch (e) {
+      if (e instanceof NotFoundError) return { ok: false, error: { field: 'analysisId', reason: 'invalid' } };
+      throw e;
+    }
+  }
+
   try {
     const confirm = form.get('confirmDuplicate');
     const duplicate = findDuplicate(db, ctx, input);
     if (duplicate && confirm !== 'add-stock' && confirm !== 'new') return { ok: false, duplicateOf: duplicate.id };
     if (duplicate && confirm === 'add-stock') {
-      addStock(db, ctx, duplicate.id, lot);
+      addStock(db, ctx, duplicate.id, lot, provenance?.photoPath ?? null);
       return { ok: true, wineId: duplicate.id };
     }
-    return { ok: true, wineId: createWine(db, ctx, input, lot).wineId };
+    return { ok: true, wineId: createWine(db, ctx, input, lot, provenance).wineId };
   } catch (e) {
     // A location of another household looks exactly like one that does not exist.
     if (e instanceof NotFoundError) return { ok: false, error: { field: 'locationId', reason: 'invalid' } };

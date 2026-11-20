@@ -15,6 +15,7 @@ import {
   homeSections,
   getWineDetail,
   type WineInput,
+  type AiProvenance,
   type CellarRow
 } from '../../src/lib/server/wines';
 import { NotFoundError, type HouseholdCtx } from '../../src/lib/server/context';
@@ -215,6 +216,61 @@ describe('wines (db)', () => {
     expect(row.identityKey).toBe(identityKey(wine({ cuvee: 'Pavillon Rouge' })));
     expect(findDuplicate(tdb.db, ctx, wine({ cuvee: 'Pavillon Rouge' }))?.id).toBe(wineId);
     expect(findDuplicate(tdb.db, ctx, wine())).toBeNull();
+  });
+
+  const prov = (over: Partial<AiProvenance> = {}): AiProvenance => ({
+    analysisId: 1,
+    photoPath: '1/abc.jpg',
+    window: win(2025, 2040),
+    confidence: 'medium',
+    rationale: 'Grand cru classé.',
+    model: 'm1',
+    ...over
+  });
+  const rowOf = (id: number) => tdb.db.select().from(tdb.schema.wines).where(eq(tdb.schema.wines.id, id)).get()!;
+
+  it('createWine avec provenance et fenêtre identique → windowSource ai + confiance/justification/modèle', () => {
+    const { wineId } = createWine(tdb.db, ctx, wine({ window: win(2025, 2040) }), lot(), prov());
+    expect(rowOf(wineId)).toMatchObject({
+      windowSource: 'ai',
+      aiConfidence: 'medium',
+      aiRationale: 'Grand cru classé.',
+      aiModel: 'm1',
+      labelPhoto: '1/abc.jpg'
+    });
+    expect(rowOf(wineId).aiAnalyzedAt).toBeGreaterThan(0);
+  });
+
+  it('createWine avec fenêtre corrigée → manual, ai_* nuls, photo attachée', () => {
+    const { wineId } = createWine(tdb.db, ctx, wine({ window: win(2026, 2040) }), lot(), prov());
+    expect(rowOf(wineId)).toMatchObject({
+      windowSource: 'manual',
+      aiConfidence: null,
+      aiRationale: null,
+      aiModel: null,
+      aiAnalyzedAt: null,
+      labelPhoto: '1/abc.jpg'
+    });
+  });
+
+  it('createWine : fenêtre IA toute nulle → manual', () => {
+    const { wineId } = createWine(tdb.db, ctx, wine(), lot(), prov({ window: NO_WINDOW }));
+    expect(rowOf(wineId)).toMatchObject({ windowSource: 'manual', aiConfidence: null, labelPhoto: '1/abc.jpg' });
+  });
+
+  it('updateWine sans changer la fenêtre garde ai ; en la changeant → manual et ai_* nuls', () => {
+    const { wineId } = createWine(tdb.db, ctx, wine({ window: win(2025, 2040) }), lot(), prov());
+    updateWine(tdb.db, ctx, wineId, wine({ cuvee: 'Pavillon', window: win(2025, 2040) }));
+    expect(rowOf(wineId)).toMatchObject({ windowSource: 'ai', aiConfidence: 'medium', aiModel: 'm1' });
+    updateWine(tdb.db, ctx, wineId, wine({ window: win(2025, 2041) }));
+    expect(rowOf(wineId)).toMatchObject({
+      windowSource: 'manual',
+      aiConfidence: null,
+      aiRationale: null,
+      aiModel: null,
+      aiAnalyzedAt: null,
+      labelPhoto: '1/abc.jpg'
+    });
   });
 
   it('deleteWine supprime le vin, ses lots et ses consommations', () => {
