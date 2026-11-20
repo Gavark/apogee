@@ -5,7 +5,7 @@ import {
   addStock,
   createWine,
   findDuplicate,
-  validateWineInput,
+  validateParsedWine,
   type Color,
   type LotInput,
   type WineInput,
@@ -67,20 +67,6 @@ export function parseWineForm(form: FormData): { input: WineInput; lot: LotInput
       quantity: whole(form, 'quantity') ?? NaN
     }
   };
-}
-
-/** validateWineInput plus the checks it assumes upstream: every year field is a whole number. */
-export function validateParsedWine(input: WineInput, year: number): WineInputError | null {
-  const years: [string, number | null][] = [
-    ['vintage', input.vintage],
-    ['acquiredYear', input.acquiredYear],
-    ['drinkFrom', input.window.drinkFrom],
-    ['peakFrom', input.window.peakFrom],
-    ['peakTo', input.window.peakTo],
-    ['drinkUntil', input.window.drinkUntil]
-  ];
-  for (const [field, v] of years) if (v !== null && !Number.isInteger(v)) return { field, reason: 'invalid' };
-  return validateWineInput(input, year);
 }
 
 export function submitAddWine(db: DB, ctx: HouseholdCtx, form: FormData, year: number): AddResult {

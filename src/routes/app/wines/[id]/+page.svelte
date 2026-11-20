@@ -77,15 +77,22 @@
 
   async function adjust(lot: CellarLot, delta: 1 | -1) {
     const r = await run({ opId: newOpId(), kind: 'adjust', lotId: lot.lotId, delta });
-    if (r && delta === -1) {
+    // Undo only what was really removed: a lot already emptied elsewhere applies 0.
+    const removed = r && delta === -1 ? -(r.appliedQuantity ?? 0) : 0;
+    if (removed > 0) {
       showToast(m.wine_toast_removed(), {
         label: m.wine_toast_undo(),
         run: async () => {
-          await run({ opId: newOpId(), kind: 'adjust', lotId: lot.lotId, delta: 1 });
+          await run({ opId: newOpId(), kind: 'adjust', lotId: lot.lotId, delta: removed });
         }
       });
     }
   }
+
+  // Moving a lot onto itself (same location, same spot) is rejected by the server: block it here.
+  const moveIsNoop = $derived(
+    moving !== null && Number(moveTo) === moving.locationId && movePosition.trim() === moving.position
+  );
 
   function openMove(lot: CellarLot) {
     moving = lot;
@@ -97,7 +104,7 @@
   async function submitMove(e: SubmitEvent) {
     e.preventDefault();
     const lot = moving;
-    if (!lot) return;
+    if (!lot || moveIsNoop) return;
     const quantity = Math.min(Math.max(1, Math.floor(Number(moveQty) || 1)), lot.quantity);
     const r = await run({
       opId: newOpId(),
@@ -108,7 +115,7 @@
       quantity
     });
     moving = null;
-    if (r) showToast(m.wine_toast_moved({ count: r.appliedQuantity ?? quantity }));
+    if (r && r.appliedQuantity) showToast(m.wine_toast_moved({ count: r.appliedQuantity }));
   }
 
   async function drink(lot: CellarLot) {
@@ -117,7 +124,7 @@
     const now = new Date();
     const consumedOn = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
     const r = await run({ opId: newOpId(), kind: 'consume', lotId: lot.lotId, consumedOn });
-    if (r?.consumptionId) {
+    if (r?.status === 'applied' && r.consumptionId) {
       const consumptionId = r.consumptionId;
       showToast(m.wine_toast_drunk(), {
         label: m.wine_toast_undo(),
@@ -219,7 +226,8 @@
     </Field>
     <Field label={m.form_position()} bind:value={movePosition} autocomplete="off" />
     <Field label={m.form_quantity()} type="number" inputmode="numeric" min="1" max={moving?.quantity} bind:value={moveQty} />
-    <Button type="submit" block disabled={busy}>{m.wine_move_submit()}</Button>
+    {#if moveIsNoop}<p class="muted small">{m.wine_move_same_hint()}</p>{/if}
+    <Button type="submit" block disabled={busy || moveIsNoop}>{m.wine_move_submit()}</Button>
   </form>
 </Sheet>
 

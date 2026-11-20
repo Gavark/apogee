@@ -360,5 +360,6 @@
   ],
   "wine_edit_title": "Edit wine",
   "wine_edit_page_title": "Edit a wine",
-  "wine_save": "Save"
+  "wine_save": "Save",
+  "wine_move_same_hint": "Choose another location or spot: the bottle is already there."
 }

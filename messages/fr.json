@@ -360,5 +360,6 @@
   ],
   "wine_edit_title": "Modifier le vin",
   "wine_edit_page_title": "Modifier un vin",
-  "wine_save": "Enregistrer"
+  "wine_save": "Enregistrer",
+  "wine_move_same_hint": "Choisissez un autre lieu ou une autre précision : la bouteille est déjà là."
 }

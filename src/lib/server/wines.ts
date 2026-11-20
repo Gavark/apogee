@@ -73,6 +73,26 @@ export function validateWineInput(input: WineInput, currentYear: number): WineIn
   return validateWindow(input.window, vintage ?? input.acquiredYear);
 }
 
+/**
+ * validateWineInput plus the checks it assumes upstream: every year field is a whole number, and the
+ * cellar-entry year lies within 1900..currentYear (window years are ordered by validateWindow).
+ */
+export function validateParsedWine(input: WineInput, currentYear: number): WineInputError | null {
+  const years: [string, number | null][] = [
+    ['vintage', input.vintage],
+    ['acquiredYear', input.acquiredYear],
+    ['drinkFrom', input.window.drinkFrom],
+    ['peakFrom', input.window.peakFrom],
+    ['peakTo', input.window.peakTo],
+    ['drinkUntil', input.window.drinkUntil]
+  ];
+  for (const [field, v] of years) if (v !== null && !Number.isInteger(v)) return { field, reason: 'invalid' };
+  const { acquiredYear } = input;
+  if (acquiredYear !== null && (acquiredYear < MIN_VINTAGE || acquiredYear > currentYear))
+    return { field: 'acquiredYear', reason: 'invalid' };
+  return validateWineInput(input, currentYear);
+}
+
 function assertQuantity(quantity: number): void {
   if (!Number.isInteger(quantity) || quantity < 1) throw new RangeError('quantity must be an integer >= 1');
 }

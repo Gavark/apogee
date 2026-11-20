@@ -4,6 +4,7 @@ import { makeTestDb } from '../helpers/db';
 import { makeHousehold, makeUser, makeLocation } from '../helpers/fixtures';
 import { parseWineForm, submitAddWine } from '../../src/routes/app/add/_logic';
 import type { HouseholdCtx } from '../../src/lib/server/context';
+import { validateParsedWine } from '../../src/lib/server/wines';
 
 const Y = 2026;
 
@@ -134,4 +135,20 @@ describe('submitAddWine', () => {
     expect(r).toEqual({ ok: false, error: { field: 'locationId', reason: 'invalid' } });
     expect(tdb.db.select().from(tdb.schema.wines).where(eq(tdb.schema.wines.householdId, ctx.householdId)).all()).toHaveLength(0);
   });
+});
+
+describe('validateParsedWine', () => {
+  const base = {
+    producer: 'X', cuvee: null, appellation: null, region: null, country: null, color: null,
+    vintage: null as number | null, grapes: null, formatCl: 75, acquiredYear: 2020 as number | null,
+    window: { drinkFrom: null, peakFrom: null, peakTo: null, drinkUntil: null }, notes: null
+  };
+  it("année d'entrée hors 1900..année courante → invalid sur acquiredYear", () => {
+    for (const y of [1899, Y + 1, 0, -5])
+      expect(validateParsedWine({ ...base, acquiredYear: y }, Y)).toEqual({ field: 'acquiredYear', reason: 'invalid' });
+    expect(validateParsedWine({ ...base, acquiredYear: Y }, Y)).toBeNull();
+    expect(validateParsedWine({ ...base, acquiredYear: 1900 }, Y)).toBeNull();
+  });
+  it('année non entière → invalid', () =>
+    expect(validateParsedWine({ ...base, vintage: NaN }, Y)).toEqual({ field: 'vintage', reason: 'invalid' }));
 });
