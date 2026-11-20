@@ -180,7 +180,21 @@
   "loc_add_submit": "Ajouter",
   "loc_empty_title": "Aucun lieu pour l'instant",
   "loc_empty_desc": "Ajoutez votre premier lieu de stockage pour y ranger vos bouteilles.",
-  "loc_bottle_count": "{count} bouteille(s)",
+  "loc_bottle_count": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} bouteille",
+        "countPlural=*": "{count} bouteilles"
+      }
+    }
+  ],
   "loc_rename": "Renommer",
   "loc_rename_label": "Nom du lieu",
   "loc_save": "Enregistrer",
@@ -190,7 +204,161 @@
   "loc_delete": "Supprimer",
   "loc_err_empty": "Le nom doit contenir entre 1 et 60 caractères.",
   "loc_err_duplicate": "Un lieu porte déjà ce nom.",
-  "loc_err_not_empty": "Ce lieu contient encore {count} bouteille(s).",
+  "loc_err_not_empty": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Ce lieu contient encore {count} bouteille.",
+        "countPlural=*": "Ce lieu contient encore {count} bouteilles."
+      }
+    }
+  ],
   "loc_err_not_found": "Lieu introuvable : peut-être déjà supprimé.",
-  "loc_toast_deleted": "Lieu supprimé."
+  "loc_toast_deleted": "Lieu supprimé.",
+  "color_red": "rouge",
+  "color_white": "blanc",
+  "color_rose": "rosé",
+  "color_sparkling": "effervescent",
+  "color_sweet": "liquoreux",
+  "color_fortified": "muté",
+  "format_37": "37,5 cl",
+  "format_50": "50 cl",
+  "format_75": "75 cl",
+  "format_150": "Magnum (150 cl)",
+  "format_300": "Jéroboam (300 cl)",
+  "format_600": "Mathusalem (600 cl)",
+  "wine_bottle_count": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} bouteille",
+        "countPlural=*": "{count} bouteilles"
+      }
+    }
+  ],
+  "form_section_wine": "Le vin",
+  "form_section_stock": "Rangement",
+  "form_section_window": "Fenêtre de dégustation",
+  "form_producer": "Producteur",
+  "form_cuvee": "Cuvée",
+  "form_appellation": "Appellation",
+  "form_region": "Région",
+  "form_country": "Pays",
+  "form_color": "Couleur",
+  "form_color_none": "Non précisée",
+  "form_vintage": "Millésime",
+  "form_vintage_hint": "Laissez vide pour un vin sans année.",
+  "form_acquired_year": "Année d'entrée en cave",
+  "form_acquired_hint": "Distingue les achats successifs d'un vin sans millésime.",
+  "form_grapes": "Cépages",
+  "form_format": "Format",
+  "form_notes": "Notes",
+  "form_window_hint": "Des années précises, ou tout laisser vide si vous ne savez pas.",
+  "form_drink_from": "À boire à partir de",
+  "form_peak_from": "Apogée de",
+  "form_peak_to": "Apogée jusqu'à",
+  "form_drink_until": "À boire jusqu'en",
+  "form_location": "Lieu",
+  "form_position": "Précision (casier, étagère…)",
+  "form_quantity": "Quantité",
+  "form_err_producer_required": "Indiquez au moins un producteur, une cuvée ou une appellation.",
+  "form_err_acquired_required": "Indiquez l'année d'entrée en cave.",
+  "form_err_vintage_invalid": "Millésime invalide : entre 1900 et cette année.",
+  "form_err_format_invalid": "Format invalide.",
+  "form_err_quantity_invalid": "Indiquez une quantité d'au moins 1.",
+  "form_err_location_invalid": "Choisissez un lieu.",
+  "form_err_year_invalid": "Année invalide.",
+  "form_err_partial": "Renseignez les deux années, ou aucune.",
+  "form_err_order": "Les années ne sont pas dans le bon ordre.",
+  "form_err_before_ref": "La fenêtre ne peut pas commencer avant le millésime (ou l'année d'entrée).",
+  "add_page_title": "Ajouter une bouteille",
+  "add_title": "Ajouter une bouteille",
+  "add_submit": "Ajouter à la cave",
+  "add_no_location_title": "Créez d'abord un lieu",
+  "add_no_location_desc": "Une bouteille est toujours rangée quelque part : ajoutez votre cave, un cellier…",
+  "add_no_location_action": "Gérer les lieux",
+  "add_done_title": "Bouteille ajoutée",
+  "add_another": "Ajouter une autre",
+  "add_view_wine": "Voir la fiche",
+  "add_dup_title": "Ce vin est déjà dans la cave",
+  "add_dup_body": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Il en reste {count} bouteille.",
+        "countPlural=*": "Il en reste {count} bouteilles."
+      }
+    }
+  ],
+  "add_dup_add_stock": "Ajouter au stock existant",
+  "add_dup_new": "Créer une fiche séparée",
+  "add_dup_view": "Voir la fiche existante",
+  "wine_unnamed": "Vin sans nom",
+  "wine_nv": "NV",
+  "wine_window_title": "Fenêtre de dégustation",
+  "wine_window_manual": "Saisie manuelle",
+  "wine_window_unknown": "Aucune fenêtre renseignée pour l'instant.",
+  "wine_lots_title": "Stock",
+  "wine_lots_empty": "Plus aucune bouteille en stock.",
+  "wine_lot_inc": "Ajouter une bouteille",
+  "wine_lot_dec": "Retirer une bouteille",
+  "wine_lot_move": "Déplacer",
+  "wine_drink": "Bue",
+  "wine_drink_which": "Quelle bouteille ?",
+  "wine_move_title": "Déplacer des bouteilles",
+  "wine_move_to": "Vers le lieu",
+  "wine_move_submit": "Déplacer",
+  "wine_history_title": "Historique",
+  "wine_history_empty": "Aucune bouteille bue pour l'instant.",
+  "wine_history_by": "par {user}",
+  "wine_history_from": "depuis {location}",
+  "wine_edit": "Modifier",
+  "wine_delete": "Supprimer",
+  "wine_cancel": "Annuler",
+  "wine_delete_title": "Supprimer ce vin ?",
+  "wine_delete_body": "La fiche, son stock et son historique seront supprimés définitivement.",
+  "wine_delete_confirm": "Supprimer définitivement",
+  "wine_err_op": "L'opération a échoué. Réessayez.",
+  "wine_err_empty_lot": "Ce lot est vide.",
+  "wine_err_network": "Connexion impossible. Réessayez.",
+  "wine_toast_drunk": "Bouteille bue.",
+  "wine_toast_removed": "Bouteille retirée.",
+  "wine_toast_undo": "Annuler",
+  "wine_toast_undone": "Annulé.",
+  "wine_toast_moved": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} bouteille déplacée.",
+        "countPlural=*": "{count} bouteilles déplacées."
+      }
+    }
+  ],
+  "wine_edit_title": "Modifier le vin",
+  "wine_edit_page_title": "Modifier un vin",
+  "wine_save": "Enregistrer"
 }

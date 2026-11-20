@@ -180,7 +180,21 @@
   "loc_add_submit": "Add",
   "loc_empty_title": "No locations yet",
   "loc_empty_desc": "Add your first storage location to start placing bottles.",
-  "loc_bottle_count": "{count} bottle(s)",
+  "loc_bottle_count": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} bottle",
+        "countPlural=*": "{count} bottles"
+      }
+    }
+  ],
   "loc_rename": "Rename",
   "loc_rename_label": "Location name",
   "loc_save": "Save",
@@ -190,7 +204,161 @@
   "loc_delete": "Delete",
   "loc_err_empty": "The name must be 1 to 60 characters.",
   "loc_err_duplicate": "A location already has this name.",
-  "loc_err_not_empty": "This location still holds {count} bottle(s).",
+  "loc_err_not_empty": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "This location still holds {count} bottle.",
+        "countPlural=*": "This location still holds {count} bottles."
+      }
+    }
+  ],
   "loc_err_not_found": "Location not found: maybe already deleted.",
-  "loc_toast_deleted": "Location deleted."
+  "loc_toast_deleted": "Location deleted.",
+  "color_red": "red",
+  "color_white": "white",
+  "color_rose": "rosé",
+  "color_sparkling": "sparkling",
+  "color_sweet": "sweet",
+  "color_fortified": "fortified",
+  "format_37": "37.5 cl",
+  "format_50": "50 cl",
+  "format_75": "75 cl",
+  "format_150": "Magnum (150 cl)",
+  "format_300": "Jeroboam (300 cl)",
+  "format_600": "Methuselah (600 cl)",
+  "wine_bottle_count": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} bottle",
+        "countPlural=*": "{count} bottles"
+      }
+    }
+  ],
+  "form_section_wine": "The wine",
+  "form_section_stock": "Storage",
+  "form_section_window": "Drinking window",
+  "form_producer": "Producer",
+  "form_cuvee": "Cuvée",
+  "form_appellation": "Appellation",
+  "form_region": "Region",
+  "form_country": "Country",
+  "form_color": "Colour",
+  "form_color_none": "Not specified",
+  "form_vintage": "Vintage",
+  "form_vintage_hint": "Leave empty for a non-vintage wine.",
+  "form_acquired_year": "Year it entered the cellar",
+  "form_acquired_hint": "Tells successive purchases of a non-vintage wine apart.",
+  "form_grapes": "Grapes",
+  "form_format": "Format",
+  "form_notes": "Notes",
+  "form_window_hint": "Exact years, or leave everything empty if you do not know.",
+  "form_drink_from": "Drink from",
+  "form_peak_from": "Peak from",
+  "form_peak_to": "Peak until",
+  "form_drink_until": "Drink until",
+  "form_location": "Location",
+  "form_position": "Spot (rack, shelf…)",
+  "form_quantity": "Quantity",
+  "form_err_producer_required": "Enter at least a producer, a cuvée or an appellation.",
+  "form_err_acquired_required": "Enter the year it entered the cellar.",
+  "form_err_vintage_invalid": "Invalid vintage: between 1900 and this year.",
+  "form_err_format_invalid": "Invalid format.",
+  "form_err_quantity_invalid": "Enter a quantity of at least 1.",
+  "form_err_location_invalid": "Choose a location.",
+  "form_err_year_invalid": "Invalid year.",
+  "form_err_partial": "Fill in both years, or neither.",
+  "form_err_order": "The years are not in the right order.",
+  "form_err_before_ref": "The window cannot start before the vintage (or entry year).",
+  "add_page_title": "Add a bottle",
+  "add_title": "Add a bottle",
+  "add_submit": "Add to cellar",
+  "add_no_location_title": "Create a location first",
+  "add_no_location_desc": "A bottle always lives somewhere: add your cellar, a cupboard…",
+  "add_no_location_action": "Manage locations",
+  "add_done_title": "Bottle added",
+  "add_another": "Add another",
+  "add_view_wine": "View the wine",
+  "add_dup_title": "This wine is already in the cellar",
+  "add_dup_body": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} bottle is in stock.",
+        "countPlural=*": "{count} bottles are in stock."
+      }
+    }
+  ],
+  "add_dup_add_stock": "Add to the existing stock",
+  "add_dup_new": "Create a separate entry",
+  "add_dup_view": "View the existing entry",
+  "wine_unnamed": "Unnamed wine",
+  "wine_nv": "NV",
+  "wine_window_title": "Drinking window",
+  "wine_window_manual": "Entered manually",
+  "wine_window_unknown": "No drinking window entered yet.",
+  "wine_lots_title": "Stock",
+  "wine_lots_empty": "No bottles left in stock.",
+  "wine_lot_inc": "Add a bottle",
+  "wine_lot_dec": "Remove a bottle",
+  "wine_lot_move": "Move",
+  "wine_drink": "Drunk",
+  "wine_drink_which": "Which bottle?",
+  "wine_move_title": "Move bottles",
+  "wine_move_to": "To location",
+  "wine_move_submit": "Move",
+  "wine_history_title": "History",
+  "wine_history_empty": "No bottle drunk yet.",
+  "wine_history_by": "by {user}",
+  "wine_history_from": "from {location}",
+  "wine_edit": "Edit",
+  "wine_delete": "Delete",
+  "wine_cancel": "Cancel",
+  "wine_delete_title": "Delete this wine?",
+  "wine_delete_body": "The entry, its stock and its history will be permanently deleted.",
+  "wine_delete_confirm": "Delete permanently",
+  "wine_err_op": "The operation failed. Please try again.",
+  "wine_err_empty_lot": "This lot is empty.",
+  "wine_err_network": "Cannot connect. Please try again.",
+  "wine_toast_drunk": "Bottle marked as drunk.",
+  "wine_toast_removed": "Bottle removed.",
+  "wine_toast_undo": "Undo",
+  "wine_toast_undone": "Undone.",
+  "wine_toast_moved": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} bottle moved.",
+        "countPlural=*": "{count} bottles moved."
+      }
+    }
+  ],
+  "wine_edit_title": "Edit wine",
+  "wine_edit_page_title": "Edit a wine",
+  "wine_save": "Save"
 }

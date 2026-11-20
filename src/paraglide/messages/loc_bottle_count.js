@@ -1,4 +1,5 @@
 /* eslint-disable */
+import * as registry from '../registry.js'
 import { getLocale, experimentalStaticLocale } from '../runtime.js';
 
 /** @typedef {import('../runtime.js').LocalizedString} LocalizedString */
@@ -8,9 +9,10 @@ import { getLocale, experimentalStaticLocale } from '../runtime.js';
 
 
 /**
-* | output |
-* | --- |
-* | "{count} bottle(s)" |
+* | countPlural | output |
+* | --- | --- |
+* | "one" | "{count} bottle" |
+* | * | "{count} bottles" |
 *
 * @param {Loc_Bottle_CountInputs} inputs
 * @param {{ locale?: "fr" | "en" }} options
@@ -18,6 +20,14 @@ import { getLocale, experimentalStaticLocale } from '../runtime.js';
 */
 export const loc_bottle_count = /** @type {((inputs: Loc_Bottle_CountInputs, options?: { locale?: "fr" | "en" }) => LocalizedString) & import('../runtime.js').MessageMetadata<Loc_Bottle_CountInputs, { locale?: "fr" | "en" }, {}>} */ ((i, options = {}) => {
 	const locale = experimentalStaticLocale ?? options.locale ?? getLocale()
-	if (locale === "en") return /** @type {LocalizedString} */ (`${i?.count} bottle(s)`)
-	return /** @type {LocalizedString} */ (`${i?.count} bouteille(s)`)
+	if (locale === "en") {
+		const countPlural = registry.plural("en", i?.count, {}, true);
+		if (countPlural === "one") return /** @type {LocalizedString} */ (`${i?.count} bottle`);
+		return /** @type {LocalizedString} */ (`${i?.count} bottles`)
+	}
+	{
+		const countPlural = registry.plural("fr", i?.count, {}, true);
+		if (countPlural === "one") return /** @type {LocalizedString} */ (`${i?.count} bouteille`);
+		return /** @type {LocalizedString} */ (`${i?.count} bouteilles`)
+	}
 });
