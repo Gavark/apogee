@@ -30,10 +30,10 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Set up Node
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v7
         with:
           node-version: '26'
           cache: 'npm'
@@ -65,7 +65,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Prepare platform-pair name
         run: |
@@ -105,9 +105,10 @@ jobs:
           digest="${{ steps.build.outputs.digest }}"
           touch "${{ runner.temp }}/digests/${digest#sha256:}"
 
-      # NOTE: upload-artifact + download-artifact are pinned to matching
-      # majors (v7 ↔ v7) — mixing across majors broke the API contract in
-      # previous bumps. Keep them in lockstep when bumping further.
+      # NOTE: upload-artifact and download-artifact must stay on paired
+      # majors — mixing unpaired majors broke the API contract in previous
+      # bumps. download-artifact@v8 is the counterpart of upload-artifact@v7
+      # (its README documents v8 with upload-artifact@v7); bump them together.
       - name: Upload digest
         uses: actions/upload-artifact@v7
         with:
@@ -125,7 +126,7 @@ jobs:
 
     steps:
       - name: Download digests
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           path: ${{ runner.temp }}/digests
           pattern: digests-*
