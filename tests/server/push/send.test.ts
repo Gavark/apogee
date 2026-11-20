@@ -87,4 +87,11 @@ describe('sendToUser', () => {
     const res = await sendToUser(tdb.db, userId, payload, async () => ({ statusCode: 201 }));
     expect(res).toEqual({ sent: 0, dead: 0, failed: 0 });
   });
+
+  it('never throws when VAPID key loading fails: counts failed', async () => {
+    sub('https://push.example/a');
+    tdb.sqlite.exec('DROP TABLE app_config');
+    const res = await sendToUser(tdb.db, userId, payload, async () => ({ statusCode: 201 }));
+    expect(res).toEqual({ sent: 0, dead: 0, failed: 1 });
+  });
 });

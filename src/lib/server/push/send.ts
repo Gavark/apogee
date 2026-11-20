@@ -42,7 +42,14 @@ export async function sendToUser(
   const result = { sent: 0, dead: 0, failed: 0 };
   const subs = listSubscriptionsForUser(db, userId);
   if (subs.length === 0) return result;
-  const vapid = vapidDetails(await getVapidKeys(db));
+  let vapid: ReturnType<typeof vapidDetails>;
+  try {
+    vapid = vapidDetails(await getVapidKeys(db));
+  } catch (e) {
+    console.error('[push] vapid keys unavailable', { error: (e as { name?: string } | null)?.name ?? 'Error' });
+    result.failed = subs.length;
+    return result;
+  }
 
   for (const sub of subs) {
     let status: number | undefined;

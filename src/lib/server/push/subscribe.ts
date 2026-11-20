@@ -29,6 +29,7 @@ export function registerSubscription(db: DB, userId: number, sub: NewSubscriptio
   }).onConflictDoUpdate({
     target: schema.pushSubscriptions.endpoint,
     set: {
+      userId,
       p256dh: sub.p256dh,
       auth: sub.auth,
       userAgent: sub.userAgent,
@@ -70,4 +71,14 @@ export function deleteSubscriptionByEndpoint(db: DB, endpoint: string): void {
   db.delete(schema.pushSubscriptions)
     .where(eq(schema.pushSubscriptions.endpoint, endpoint))
     .run();
+}
+
+/** Delete by endpoint only if it belongs to the given user. Returns true if a row was deleted. */
+export function revokeSubscriptionByEndpoint(db: DB, userId: number, endpoint: string): boolean {
+  return (
+    db.delete(schema.pushSubscriptions)
+      .where(and(eq(schema.pushSubscriptions.endpoint, endpoint), eq(schema.pushSubscriptions.userId, userId)))
+      .returning({ id: schema.pushSubscriptions.id })
+      .all().length > 0
+  );
 }
