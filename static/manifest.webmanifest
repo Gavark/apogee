@@ -1,6 +1,7 @@
 {
   "name": "Apogée",
   "short_name": "Apogée",
+  "id": "/",
   "start_url": "/app",
   "display": "standalone",
   "background_color": "#EDF0EC",

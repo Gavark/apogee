@@ -151,13 +151,27 @@ export async function reloadAfterColdStart(
   await deps.invalidate();
 }
 
+/** On a weak signal, how long opening a page waits for the network before its copy is shown instead. */
+export const NETWORK_TIMEOUT_MS = 4_000;
+
 /**
- * Network first, with a deadline when there is a copy: the network's response (errors and redirects
- * included), or `copy` when the network fails or takes longer than `ms` (weak signal: no waiting for
- * the browser's own timeout). Without a copy, the network whatever it takes, its failure included.
+ * The deadline before the copy answers instead of the network, or null for none. Only for opening
+ * a page (a navigation): a data request (`__data.json`) follows a gesture or a reload, and answering
+ * it with the copy while the network is merely slow would show pre-gesture data as current (the
+ * overlay drops the gesture once the reload returns, so the count would silently revert).
  */
-export async function networkOrCopy(network: Promise<Response>, copy: Response | null, ms: number): Promise<Response> {
+export function networkDeadlineFor(request: Pick<Request, 'mode'>): number | null {
+  return request.mode === 'navigate' ? NETWORK_TIMEOUT_MS : null;
+}
+
+/**
+ * Network first: the network's response (errors and redirects included), or `copy` when the network
+ * fails or, with a deadline `ms`, takes longer (weak signal: no waiting for the browser's own
+ * timeout). Without a copy, the network whatever it takes, its failure included.
+ */
+export async function networkOrCopy(network: Promise<Response>, copy: Response | null, ms: number | null): Promise<Response> {
   if (!copy) return network;
+  if (ms === null) return network.catch(() => copy);
   let timer: ReturnType<typeof setTimeout> | undefined;
   const deadline = new Promise<null>((resolve) => (timer = setTimeout(() => resolve(null), ms)));
   try {

@@ -12,6 +12,7 @@ import {
   isDataRequest,
   isOfflineReadable,
   isStorable,
+  networkDeadlineFor,
   networkOrCopy,
   offlineRedirectFor
 } from '../lib/offline/page-cache';
@@ -103,24 +104,23 @@ self.addEventListener('fetch', (event) => {
   if (redirectTo) event.respondWith(orRedirect(event.request, redirectTo));
 });
 
-/** On a weak signal, how long a page waits for the network before its copy is shown instead. */
-const NETWORK_TIMEOUT_MS = 4_000;
-
 /**
  * A page with nothing to keep (`/`, which only redirects): the network, else (failure or deadline)
  * a redirect to a reading page the copy can answer. The installed app may still start there offline.
  */
 function orRedirect(request: Request, to: string): Promise<Response> {
   const fallback = Response.redirect(new URL(to, self.location.origin).href, 302);
-  return networkOrCopy(fetch(request), fallback, NETWORK_TIMEOUT_MS);
+  return networkOrCopy(fetch(request), fallback, networkDeadlineFor(request));
 }
 
 const pageKey = (url: URL) => new URL(cacheKeyFor(url), self.location.origin).href;
 
 /**
  * The reading pages (HTML and __data.json): the network first, a copy of every plain 200 kept
- * for later; the copy when the network fails or is too slow (NETWORK_TIMEOUT_MS). With no copy,
- * the network whatever it takes, and its failure goes through: SvelteKit shows its offline error.
+ * for later; the copy when the network fails, or when opening a page (HTML) takes too long
+ * (networkDeadlineFor: never for __data.json, whose slow answer must not be replaced by older data).
+ * With no copy, the network whatever it takes, and its failure goes through: SvelteKit shows its
+ * offline error.
  * Errors, redirects (an expired session sends to /login) and 401s always reach the page, never
  * replaced by the copy.
  */
@@ -130,7 +130,7 @@ async function networkFirst(event: FetchEvent, url: URL): Promise<Response> {
   // anything reads the response, so the clone is taken first.
   event.waitUntil(network.then((res) => (isStorable(res) ? store(url, res.clone()) : undefined)).catch(() => {}));
   const copy = await fromCache(url).catch(() => null);
-  return networkOrCopy(network, copy, NETWORK_TIMEOUT_MS);
+  return networkOrCopy(network, copy, networkDeadlineFor(event.request));
 }
 
 async function store(url: URL, res: Response): Promise<void> {

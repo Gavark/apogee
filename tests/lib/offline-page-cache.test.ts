@@ -9,6 +9,7 @@ import {
   isOfflineReadable,
   reloadAfterColdStart,
   isStorable,
+  networkDeadlineFor,
   networkOrCopy,
   offlineRedirectFor
 } from '$lib/offline/page-cache';
@@ -315,5 +316,28 @@ describe('networkOrCopy (délai réseau)', () => {
     await expect(p.then((r) => r.text())).resolves.toBe('lent');
     vi.useRealTimers();
     await expect(networkOrCopy(Promise.reject(new TypeError('Failed to fetch')), null, 4000)).rejects.toThrow('Failed to fetch');
+  });
+});
+
+describe('networkDeadlineFor (délai réseau limité aux ouvertures de page)', () => {
+  it('navigation (ouverture d’une page, HTML) → délai de 4 s avant la copie', () => {
+    expect(networkDeadlineFor({ mode: 'navigate' })).toBe(4000);
+  });
+
+  it.each(['cors', 'same-origin', 'no-cors'] as const)(
+    'requête de données (%s, __data.json : rechargement après un geste) → aucun délai : réseau strict, copie seulement en échec',
+    (mode) => {
+      expect(networkDeadlineFor({ mode })).toBeNull();
+    }
+  );
+
+  it('sans délai, un réseau lent n’est jamais remplacé par la copie ; seul l’échec la sert', async () => {
+    vi.useFakeTimers();
+    const slow = networkOrCopy(new Promise<Response>((r) => setTimeout(() => r(new Response('frais')), 30_000)), new Response('copie'), null);
+    await vi.advanceTimersByTimeAsync(30_000);
+    await expect(slow.then((r) => r.text())).resolves.toBe('frais');
+    vi.useRealTimers();
+    const failed = await networkOrCopy(Promise.reject(new TypeError('Failed to fetch')), new Response('copie'), null);
+    await expect(failed.text()).resolves.toBe('copie');
   });
 });
