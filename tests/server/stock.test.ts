@@ -244,6 +244,22 @@ describe('stock ops', () => {
     expect(ops()[0].householdId).toBe(otherCtx.householdId);
   });
 
+  it('un opId en majuscules rejoué est la même opération', () => {
+    const { lotId } = addLot(ctx.householdId, locA, 5);
+    const op = parseStockOps({
+      ops: [{ opId: '11111111-1111-4111-8111-11111111ABCD', kind: 'adjust', lotId, delta: -1 }]
+    });
+    const low = parseStockOps({
+      ops: [{ opId: '11111111-1111-4111-8111-11111111abcd', kind: 'adjust', lotId, delta: -1 }]
+    });
+    if (!op.ok || !low.ok) throw new Error('parse failed');
+    applyStockOps(tdb.db, ctx, op.ops);
+    applyStockOps(tdb.db, ctx, low.ops);
+    expect(lot(lotId)?.quantity).toBe(4);
+    expect(ops()).toHaveLength(1);
+    expect(ops()[0].opId).toBe('11111111-1111-4111-8111-11111111abcd');
+  });
+
   describe('parseStockOps', () => {
     const good = { opId: '11111111-1111-4111-8111-111111111111', kind: 'adjust', lotId: 1, delta: 1 };
     it('accepte des ops valides de chaque type', () => {
@@ -286,6 +302,41 @@ describe('stock ops', () => {
       }));
       expect(parseStockOps({ ops: many }).ok).toBe(false);
       expect(parseStockOps({ ops: many.slice(0, 100) }).ok).toBe(true);
+    });
+    it('bornes : ids sûrs, delta, quantity, toPosition, note', () => {
+      const bad = (op: unknown) => expect(parseStockOps({ ops: [op] }).ok).toBe(false);
+      const ok = (op: unknown) => expect(parseStockOps({ ops: [op] }).ok).toBe(true);
+      const id = good.opId;
+      bad({ ...good, lotId: 2 ** 60 });
+      bad({ opId: id, kind: 'unconsume', consumptionId: Number.MAX_SAFE_INTEGER + 2 });
+      ok({ ...good, delta: 10000 });
+      ok({ ...good, delta: -10000 });
+      bad({ ...good, delta: 10001 });
+      bad({ ...good, delta: -10001 });
+      const move = { opId: id, kind: 'move', lotId: 1, toLocationId: 2, toPosition: 'A1', quantity: 1 };
+      ok({ ...move, quantity: 10000 });
+      bad({ ...move, quantity: 10001 });
+      ok({ ...move, toPosition: 'x'.repeat(100) });
+      bad({ ...move, toPosition: 'x'.repeat(101) });
+      bad({ ...move, toPosition: ' '.repeat(5) + 'x'.repeat(101) });
+      const consume = { opId: id, kind: 'consume', lotId: 1, consumedOn: '2026-11-19' };
+      ok({ ...consume, note: 'x'.repeat(2000) });
+      bad({ ...consume, note: 'x'.repeat(2001) });
+    });
+    it('toPosition est rogné et opId passé en minuscules', () => {
+      const r = parseStockOps({
+        ops: [
+          {
+            opId: '11111111-1111-4111-8111-11111111ABCD',
+            kind: 'move',
+            lotId: 1,
+            toLocationId: 2,
+            toPosition: '  B2  ',
+            quantity: 1
+          }
+        ]
+      });
+      expect(r.ok && r.ops[0]).toMatchObject({ opId: '11111111-1111-4111-8111-11111111abcd', toPosition: 'B2' });
     });
   });
 });

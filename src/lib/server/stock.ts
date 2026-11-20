@@ -22,12 +22,16 @@ export type OpResult = {
 };
 
 export const MAX_OPS_PER_REQUEST = 100;
+export const MAX_STOCK_DELTA = 10000;
+export const MAX_POSITION_LEN = 100;
+export const MAX_NOTE_LEN = 2000;
 
 const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
 const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
-const isId = (v: unknown): v is number => Number.isInteger(v) && (v as number) > 0;
+const isId = (v: unknown): v is number => Number.isSafeInteger(v) && (v as number) > 0;
+const isCount = (v: unknown): v is number => Number.isSafeInteger(v) && (v as number) >= 1 && (v as number) <= MAX_STOCK_DELTA;
 
 function isCalendarDate(v: unknown): v is string {
   if (typeof v !== 'string' || !ISO_DATE.test(v)) return false;
@@ -39,14 +43,16 @@ function parseOp(raw: unknown): StockOp | null {
   if (!isRecord(raw)) return null;
   const { opId, kind } = raw;
   if (typeof opId !== 'string' || !UUID_V4.test(opId)) return null;
+  // Case-insensitive on the wire, canonical (lowercase) everywhere after: a replay with other casing is the same op.
+  const id = opId.toLowerCase();
   switch (kind) {
     case 'consume': {
       const { lotId, consumedOn, rating, note } = raw;
       if (!isId(lotId) || !isCalendarDate(consumedOn)) return null;
       if (rating != null && !(Number.isInteger(rating) && (rating as number) >= 1 && (rating as number) <= 5)) return null;
-      if (note != null && typeof note !== 'string') return null;
+      if (note != null && (typeof note !== 'string' || note.length > MAX_NOTE_LEN)) return null;
       return {
-        opId,
+        opId: id,
         kind,
         lotId,
         consumedOn,
@@ -56,19 +62,21 @@ function parseOp(raw: unknown): StockOp | null {
     }
     case 'adjust': {
       const { lotId, delta } = raw;
-      if (!isId(lotId) || !Number.isInteger(delta) || delta === 0) return null;
-      return { opId, kind, lotId, delta: delta as number };
+      if (!isId(lotId) || !Number.isSafeInteger(delta) || delta === 0 || Math.abs(delta as number) > MAX_STOCK_DELTA) return null;
+      return { opId: id, kind, lotId, delta: delta as number };
     }
     case 'move': {
       const { lotId, toLocationId, toPosition, quantity } = raw;
       if (!isId(lotId) || !isId(toLocationId) || typeof toPosition !== 'string') return null;
-      if (!Number.isInteger(quantity) || (quantity as number) < 1) return null;
-      return { opId, kind, lotId, toLocationId, toPosition, quantity: quantity as number };
+      if (!isCount(quantity)) return null;
+      const position = toPosition.trim();
+      if (position.length > MAX_POSITION_LEN) return null;
+      return { opId: id, kind, lotId, toLocationId, toPosition: position, quantity };
     }
     case 'unconsume': {
       const { consumptionId } = raw;
       if (!isId(consumptionId)) return null;
-      return { opId, kind, consumptionId };
+      return { opId: id, kind, consumptionId };
     }
     default:
       return null;
