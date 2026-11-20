@@ -2,6 +2,7 @@ import { and, eq, gte, inArray, isNotNull, or, sql } from 'drizzle-orm';
 import type { BaseSQLiteDatabase } from 'drizzle-orm/sqlite-core';
 import * as schema from './db/schema';
 import { NotFoundError, type HouseholdCtx } from './context';
+import { zonedParts } from './timezone';
 import { isHouseholdPhotoPath, readPhoto, savePhoto, type PhotoMime } from './photos';
 import { AiError, type AiErrorCode, type AiProvider, type LabelAnalysis, type LabelHints } from './ai/types';
 
@@ -12,22 +13,6 @@ const { labelAnalyses } = schema;
 export type AnalysisOutcome =
   | { ok: true; analysisId: number; analysis: LabelAnalysis; model: string }
   | { ok: false; analysisId: number | null; error: AiErrorCode | 'limit_reached' | 'invalid_photo' };
-
-function zonedParts(ms: number, timeZone: string): { y: number; mo: number; d: number; offsetMs: number } {
-  const parts = new Intl.DateTimeFormat('en-US', {
-    timeZone,
-    hourCycle: 'h23',
-    year: 'numeric',
-    month: 'numeric',
-    day: 'numeric',
-    hour: 'numeric',
-    minute: 'numeric',
-    second: 'numeric'
-  }).formatToParts(new Date(ms));
-  const n = (t: string) => Number(parts.find((p) => p.type === t)!.value);
-  const asUtc = Date.UTC(n('year'), n('month') - 1, n('day'), n('hour'), n('minute'), n('second'));
-  return { y: n('year'), mo: n('month'), d: n('day'), offsetMs: asUtc - Math.floor(ms / 1000) * 1000 };
-}
 
 /** Unix timestamp (seconds) of the start of the local day containing `now` in `timeZone`. */
 function startOfLocalDay(now: Date, timeZone: string): number {

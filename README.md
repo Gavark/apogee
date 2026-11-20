@@ -38,6 +38,7 @@ Les migrations de base de données sont appliquées automatiquement à chaque d�
 | `AI_MODEL` | `claude-opus-5-5` (Anthropic) | Modèle utilisé. Obligatoire avec `openai-compatible`. |
 | `AI_BASE_URL` | (vide) | Adresse de l'API, obligatoire avec `openai-compatible` (par exemple `https://api.openai.com/v1`). |
 | `AI_DAILY_LIMIT_PER_HOUSEHOLD` | `100` | Analyses facturées par jour et par foyer (réussies, ou réponse refusée / inexploitable). `0` = illimité. |
+| `VAPID_SUBJECT` | `mailto:admin@` + domaine de `ORIGIN` | Contact transmis aux services de notification push, au format `mailto:vous@exemple.fr`. Facultatif. |
 | `PHOTOS_DIR` | `photos/` à côté de la base (`/data/photos` dans l'image) | Dossier des photos d'étiquettes, dans le volume de données. À ne pas changer avec Docker. |
 | `BACKUP_RETENTION` | `30` | Nombre de sauvegardes conservées de chaque type (bases et archives de photos) par le conteneur `backup`. |
 | `BACKUP_SCHEDULE` | `0 3 * * *` | Horaire cron de la sauvegarde automatique (heure de `TZ`). Par défaut, tous les jours à 3 h. |
@@ -45,6 +46,16 @@ Les migrations de base de données sont appliquées automatiquement à chaque d�
 | `NODE_ENV` | `production` (image) | Fixé par l'image : cookies sécurisés, et la page `/dev/styleguide` répond 404. |
 
 `ADDRESS_HEADER` et `XFF_DEPTH` sont définis dans `docker-compose.yml` parce que le port est lié à `127.0.0.1`, derrière Caddy. Sans eux, tous les clients partageraient la même IP (celle du proxy) et la même limite de tentatives. **Si vous exposez le conteneur directement, sans reverse proxy, supprimez ces deux variables** : sinon un client pourrait forger `X-Forwarded-For` pour contourner la limite.
+
+## Notifications
+
+Apogée peut prévenir quand un vin entre dans une nouvelle phase de dégustation (à boire, apogée, à boire vite, passé) et, une fois par mois, rappeler les bouteilles à ne pas oublier. Chaque personne les active depuis **Compte > Notifications**, appareil par appareil, et peut désactiver séparément les deux types de messages.
+
+- **HTTPS obligatoire** : les navigateurs n'acceptent les notifications que sur une page HTTPS (ou `http://localhost`). Derrière le reverse proxy, `ORIGIN` doit être l'adresse HTTPS publique.
+- **iPhone et iPad (iOS 16.4 ou plus)** : ouvrez Apogée dans Safari, ajoutez-le à l'écran d'accueil, puis activez les notifications depuis l'application installée. Dans l'onglet Safari, la page l'explique et le bouton n'apparaît pas.
+- **Heure d'envoi** : au plus une notification par personne et par jour, à partir de 18 h dans le fuseau horaire du compte. Si le serveur était éteint, un seul message regroupe les changements survenus entre-temps.
+- Les clés VAPID sont générées au premier usage et conservées dans la base ; il n'y a rien à configurer. `VAPID_SUBJECT` est facultatif (voir le tableau ci-dessus).
+- Le bouton « Envoyer une notification de test » vérifie qu'un appareil reçoit bien les messages (3 essais par heure).
 
 ## Analyse IA de l'étiquette
 
@@ -117,4 +128,4 @@ npm run check        # svelte-check et TypeScript
 
 ## À venir
 
-Notifications, mode hors ligne.
+Mode hors ligne.

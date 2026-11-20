@@ -4,6 +4,7 @@
   import SignOut from 'phosphor-svelte/lib/SignOut';
   import UsersThree from 'phosphor-svelte/lib/UsersThree';
   import ShieldCheck from 'phosphor-svelte/lib/ShieldCheck';
+  import Bell from 'phosphor-svelte/lib/Bell';
   import MapPin from 'phosphor-svelte/lib/MapPin';
   import * as m from '$paraglide/messages';
   import BottomNav from '$lib/components/BottomNav.svelte';
@@ -13,9 +14,21 @@
   import LocaleSwitcher from '$lib/components/LocaleSwitcher.svelte';
   import ThemeToggle from '$lib/components/ThemeToggle.svelte';
   import { formatDate, formatDateTime } from '$lib/format';
+  import { unsubscribeThisDevice } from '$lib/push-client';
 
   let { data, form } = $props();
   const errors = $derived((form?.errors ?? {}) as Record<string, string | undefined>);
+
+  // Drop this browser's push subscription first (best effort, short timeout), then log out.
+  async function logout(e: SubmitEvent) {
+    e.preventDefault();
+    const form = e.currentTarget as HTMLFormElement;
+    await unsubscribeThisDevice({
+      serviceWorker: 'serviceWorker' in navigator ? navigator.serviceWorker : undefined,
+      fetch
+    });
+    form.submit();
+  }
 </script>
 
 <svelte:head><title>{m.account_page_title()}</title></svelte:head>
@@ -42,6 +55,14 @@
       <span class="nav-text">
         <strong>{m.loc_page_title()}</strong>
         <span class="muted">{m.account_locations_link()}</span>
+      </span>
+      <CaretRight size={18} aria-hidden="true" />
+    </a>
+    <a class="nav-card card" href="/account/notifications">
+      <Bell size={24} weight="duotone" aria-hidden="true" />
+      <span class="nav-text">
+        <strong>{m.account_notifications_title()}</strong>
+        <span class="muted">{m.account_notifications_link()}</span>
       </span>
       <CaretRight size={18} aria-hidden="true" />
     </a>
@@ -132,7 +153,7 @@
     </ul>
   </section>
 
-  <form method="POST" action="/logout">
+  <form method="POST" action="/logout" onsubmit={logout}>
     <Button type="submit" variant="secondary" block>
       <SignOut size={18} aria-hidden="true" />
       {m.account_logout()}

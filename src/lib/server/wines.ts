@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, inArray } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, sql } from 'drizzle-orm';
 import type { BaseSQLiteDatabase } from 'drizzle-orm/sqlite-core';
 import * as schema from './db/schema';
 import { NotFoundError, type HouseholdCtx } from './context';
@@ -7,8 +7,10 @@ import { getOwnedAnalysis } from './label-analyses';
 import { cleanupQuietly, deletePhoto, photosDir } from './photos';
 import type { AiConfidence } from './ai/types';
 import { WINE_FORMATS_CL, type Color } from '../wine-constants';
+import { householdReferenceTimeZone, markCurrentPhaseSilently } from './notifications/phases';
 import {
   HOME_SECTION_ORDER,
+  currentYear,
   computePhase,
   validateWindow,
   type Phase,
@@ -220,6 +222,9 @@ function sameWindow(a: WindowYears, b: WindowYears): boolean {
 const hasYears = (w: WindowYears) =>
   w.drinkFrom !== null || w.peakFrom !== null || w.peakTo !== null || w.drinkUntil !== null;
 
+/** Current calendar year in the household's reference time zone. */
+const wineYear = (db: DB, ctx: HouseholdCtx) => currentYear(householdReferenceTimeZone(db, ctx.householdId));
+
 const NO_AI = { aiConfidence: null, aiRationale: null, aiModel: null, aiAnalyzedAt: null } as const;
 
 export function createWine(
@@ -253,9 +258,18 @@ export function createWine(
       })
       .returning({ id: wines.id })
       .get().id;
-    return { wineId, lotId: upsertLot(tx, wineId, lot) };
+    const lotId = upsertLot(tx, wineId, lot);
+    markCurrentPhaseSilently(tx, wineId, wineYear(tx, ctx));
+    return { wineId, lotId };
   });
 }
+
+const totalBottles = (db: DB, wineId: number): number =>
+  db
+    .select({ n: sql<number>`coalesce(sum(${stockLots.quantity}), 0)` })
+    .from(stockLots)
+    .where(eq(stockLots.wineId, wineId))
+    .get()!.n;
 
 /** `photoPath` is attached only when the wine has no photo yet. */
 export function addStock(
@@ -274,7 +288,11 @@ export function addStock(
         .set({ labelPhoto: photoPath })
         .where(and(eq(wines.id, wineId), eq(wines.householdId, ctx.householdId)))
         .run();
-    return { lotId: upsertLot(tx, wineId, lot) };
+    // Restocking a finished wine must not announce the phase it is already in.
+    const wasEmpty = totalBottles(tx, wineId) === 0;
+    const lotId = upsertLot(tx, wineId, lot);
+    if (wasEmpty) markCurrentPhaseSilently(tx, wineId, wineYear(tx, ctx));
+    return { lotId };
   });
 }
 
@@ -291,6 +309,8 @@ export function updateWine(db: DB, ctx: HouseholdCtx, wineId: number, input: Win
       })
       .where(and(eq(wines.id, wineId), eq(wines.householdId, ctx.householdId)))
       .run();
+    // The user's own edit must never be announced by the daily scan.
+    markCurrentPhaseSilently(tx, wineId, wineYear(tx, ctx));
   });
 }
 
@@ -322,6 +342,7 @@ export function applyAiWindow(db: DB, ctx: HouseholdCtx, wineId: number, analysi
       })
       .where(and(eq(wines.id, wineId), eq(wines.householdId, ctx.householdId)))
       .run();
+    markCurrentPhaseSilently(tx, wineId, wineYear(tx, ctx));
   });
 }
 

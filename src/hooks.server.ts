@@ -11,6 +11,7 @@ import {
 } from '$lib/server/auth/session';
 import { bootstrapAdmin, hasNoUsers } from '$lib/server/auth/bootstrap';
 import { resolveLocale, type Locale } from '$lib/server/auth/locale';
+import { runNotificationTick } from '$lib/server/notifications/tick';
 import * as m from '$paraglide/messages';
 import { overwriteGetLocale, overwriteServerAsyncLocalStorage } from '$paraglide/runtime';
 
@@ -59,6 +60,15 @@ setInterval(() => purgeExpiredSessions(db), 3600 * 1000);
 // IP that ever hit /login or /signup keeps a bucket alive — under spray
 // attacks from many IPs the Map would grow unbounded.
 setInterval(() => purgeExpiredBuckets(), 3600 * 1000);
+
+// Daily digest: every 10 minutes (one push per user per local day, from 18:00 local), plus a first
+// pass shortly after startup so a restart never skips an evening. unref(): never keep the process alive.
+const notificationTick = () =>
+  runNotificationTick(db, new Date()).catch((e) =>
+    console.error('[notifications] tick failed:', e instanceof Error ? e.name : 'unknown')
+  );
+setInterval(notificationTick, 10 * 60 * 1000).unref();
+setTimeout(notificationTick, 60 * 1000).unref();
 
 export const handle: Handle = async ({ event, resolve }) => {
   await maybeBootstrap();

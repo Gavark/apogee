@@ -2,6 +2,8 @@ import { and, eq, sql } from 'drizzle-orm';
 import type { BaseSQLiteDatabase } from 'drizzle-orm/sqlite-core';
 import * as schema from './db/schema';
 import type { HouseholdCtx } from './context';
+import { currentYear } from '../phase';
+import { householdReferenceTimeZone, markCurrentPhaseSilently } from './notifications/phases';
 
 type DB = BaseSQLiteDatabase<'sync', unknown, typeof schema>;
 
@@ -99,6 +101,19 @@ export function parseStockOps(body: unknown): { ok: true; ops: StockOp[] } | { o
 
 const rejected = (opId: string, reason: NonNullable<OpResult['reason']>): OpResult => ({ opId, status: 'rejected', reason });
 
+const wineBottles = (db: DB, wineId: number): number =>
+  db
+    .select({ n: sql<number>`coalesce(sum(${stockLots.quantity}), 0)` })
+    .from(stockLots)
+    .where(eq(stockLots.wineId, wineId))
+    .get()!.n;
+
+/** Back in stock after being finished: the phase it is already in must not be announced. */
+function silenceIfRestocked(db: DB, ctx: HouseholdCtx, wineId: number, before: number): void {
+  if (before === 0 && wineBottles(db, wineId) > 0)
+    markCurrentPhaseSilently(db, wineId, currentYear(householdReferenceTimeZone(db, ctx.householdId)));
+}
+
 /** A lot belongs to a household through its wine. */
 function findOwnedLot(db: DB, ctx: HouseholdCtx, lotId: number) {
   return db
@@ -160,7 +175,9 @@ function adjust(db: DB, ctx: HouseholdCtx, op: Extract<StockOp, { kind: 'adjust'
   if (!lot) return rejected(op.opId, 'not_found');
   const next = Math.max(0, lot.quantity + op.delta);
   const applied = next - lot.quantity;
+  const before = wineBottles(db, lot.wineId);
   db.update(stockLots).set({ quantity: next }).where(eq(stockLots.id, lot.id)).run();
+  if (applied > 0) silenceIfRestocked(db, ctx, lot.wineId, before);
   return { opId: op.opId, status: applied === op.delta ? 'applied' : 'partial', appliedQuantity: applied };
 }
 
@@ -189,12 +206,14 @@ function unconsume(db: DB, ctx: HouseholdCtx, op: Extract<StockOp, { kind: 'unco
     .get();
   if (!c || c.locationId === null) return rejected(op.opId, 'not_found');
   const original = c.lotId === null ? undefined : findOwnedLot(db, ctx, c.lotId);
+  const before = wineBottles(db, c.wineId);
   if (original) {
     db.update(stockLots).set({ quantity: original.quantity + 1 }).where(eq(stockLots.id, original.id)).run();
   } else {
     addToLot(db, c.wineId, c.locationId, '', 1);
   }
   db.delete(consumptions).where(eq(consumptions.id, c.id)).run();
+  silenceIfRestocked(db, ctx, c.wineId, before);
   return { opId: op.opId, status: 'applied', consumptionId: c.id };
 }
 

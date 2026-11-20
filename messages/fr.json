@@ -468,5 +468,109 @@
   "admin_ai_test_err_rate_limited": "Fournisseur saturé ou quota atteint : réessayez plus tard.",
   "admin_ai_test_err_refused": "Le fournisseur a refusé la requête.",
   "admin_ai_test_err_invalid_response": "Réponse du fournisseur inexploitable : vérifiez le modèle.",
-  "admin_ai_test_err_unavailable": "Fournisseur injoignable : vérifiez l'adresse, le modèle et le réseau."
+  "admin_ai_test_err_unavailable": "Fournisseur injoignable : vérifiez l'adresse, le modèle et le réseau.",
+  "notif_digest_ready": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} vin est prêt à boire",
+        "countPlural=*": "{count} vins sont prêts à boire"
+      }
+    }
+  ],
+  "notif_digest_peak": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} vin entre à son apogée",
+        "countPlural=*": "{count} vins entrent à leur apogée"
+      }
+    }
+  ],
+  "notif_digest_last_call": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} vin est à boire vite",
+        "countPlural=*": "{count} vins sont à boire vite"
+      }
+    }
+  ],
+  "notif_digest_past": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} vin a passé son apogée",
+        "countPlural=*": "{count} vins ont passé leur apogée"
+      }
+    }
+  ],
+  "notif_digest_monthly": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Ce mois-ci, {count} bouteille à ne pas oublier : {names}",
+        "countPlural=*": "Ce mois-ci, {count} bouteilles à ne pas oublier : {names}"
+      }
+    }
+  ],
+  "account_notifications_title": "Notifications",
+  "account_notifications_link": "Phases à boire et rappel mensuel",
+  "notif_page_title": "Notifications",
+  "notif_test_body": "Les notifications fonctionnent sur cet appareil.",
+  "notif_prefs_title": "Ce que je reçois",
+  "notif_pref_phases": "Changements de phase",
+  "notif_pref_phases_hint": "Un vin entre dans sa fenêtre de dégustation, atteint son apogée, passe à boire vite ou est passé.",
+  "notif_pref_monthly": "Rappel mensuel",
+  "notif_pref_monthly_hint": "Chaque mois, les bouteilles à ne pas oublier.",
+  "notif_schedule_hint": "Au plus une notification par jour, vers 18 h (fuseau horaire de votre compte : {timezone}).",
+  "notif_saved": "Préférences enregistrées.",
+  "notif_this_device_title": "Cet appareil",
+  "notif_btn_enable": "Activer les notifications",
+  "notif_btn_active": "Notifications activées sur cet appareil",
+  "notif_btn_denied": "Les notifications sont bloquées pour ce site : autorisez-les dans les réglages du navigateur.",
+  "notif_btn_unsupported": "Ce navigateur ne prend pas en charge les notifications.",
+  "notif_btn_ios_hint": "Installez Apogée sur l'écran d'accueil pour recevoir les notifications.",
+  "notif_btn_error": "Impossible d'activer les notifications. Réessayez.",
+  "notif_devices_title": "Appareils abonnés",
+  "notif_devices_none": "Aucun appareil abonné.",
+  "notif_device_unknown": "Appareil inconnu",
+  "notif_device_dates": "Ajouté le {added} · vu pour la dernière fois {seen}",
+  "notif_device_remove": "Retirer",
+  "notif_device_removed": "Appareil retiré.",
+  "notif_test_button": "Envoyer une notification de test",
+  "notif_test_sent": "Notification de test envoyée.",
+  "notif_test_no_device": "Aucun appareil abonné : activez d'abord les notifications.",
+  "notif_test_failed": "L'envoi a échoué. Réessayez dans un moment.",
+  "notif_test_limit": "Limite atteinte : 3 notifications de test par heure."
 }
