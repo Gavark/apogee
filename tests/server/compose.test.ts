@@ -1,12 +1,10 @@
 import { it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 
-const compose = readFileSync('docker-compose.yml', 'utf8').replace(/
-/g, '
-');
-const dockerfile = readFileSync('Dockerfile', 'utf8').replace(/
-/g, '
-');
+// Git may check these out with CRLF on Windows; the assertions below assume LF.
+const lf = (s: string) => s.replace(/\r\n/g, '\n');
+const compose = lf(readFileSync('docker-compose.yml', 'utf8'));
+const dockerfile = lf(readFileSync('Dockerfile', 'utf8'));
 
 it('docker-compose monte /data et transmet ORIGIN, ADMIN_EMAIL, ADMIN_PASSWORD, HOUSEHOLD_NAME, TZ', () => {
   expect(compose).toMatch(/\.\/data:\/data/);

@@ -1,9 +1,8 @@
 import { it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 
-const read = (p: string) => readFileSync(p, 'utf8').replace(/
-/g, '
-');
+// Git may check YAML out with CRLF on Windows; the assertions below assume LF.
+const read = (p: string) => readFileSync(p, 'utf8').replace(/\r\n/g, '\n');
 const ci = read('.github/workflows/ci.yml');
 const publish = read('.github/workflows/docker-publish.yml');
 const release = read('.github/workflows/release.yml');
