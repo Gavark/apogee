@@ -21,6 +21,8 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV DATABASE_PATH=/data/apogee.sqlite
 ENV PORT=3000
+# Photos d'étiquette : corps de requête jusqu'à 8 Mo (défaut adapter-node : 512 Ko)
+ENV BODY_SIZE_LIMIT=8M
 
 # Production deps only
 COPY package.json package-lock.json ./

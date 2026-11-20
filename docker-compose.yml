@@ -25,6 +25,11 @@ services:
       - ADMIN_PASSWORD=${ADMIN_PASSWORD:-}
       - HOUSEHOLD_NAME=${HOUSEHOLD_NAME:-Ma cave}
       - TZ=${TZ:-Europe/Paris}
+      - AI_PROVIDER=${AI_PROVIDER:-}
+      - AI_API_KEY=${AI_API_KEY:-}
+      - AI_MODEL=${AI_MODEL:-}
+      - AI_BASE_URL=${AI_BASE_URL:-}
+      - AI_DAILY_LIMIT_PER_HOUSEHOLD=${AI_DAILY_LIMIT_PER_HOUSEHOLD:-}
       - PROTOCOL_HEADER=x-forwarded-proto
       - HOST_HEADER=x-forwarded-host
       # Behind the reverse proxy on 127.0.0.1: take the client IP from the last

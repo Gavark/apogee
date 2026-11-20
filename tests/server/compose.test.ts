@@ -28,3 +28,13 @@ it('Dockerfile : production, base SQLite dans /data, migrations avant le démarr
   expect(dockerfile).toContain('ENV DATABASE_PATH=/data/apogee.sqlite');
   expect(dockerfile).toMatch(/migrate\.ts[\s\S]*exec node \/app\/build\/index\.js/);
 });
+
+it('docker-compose transmet les variables AI_*', () => {
+  for (const key of ['AI_PROVIDER', 'AI_API_KEY', 'AI_MODEL', 'AI_BASE_URL', 'AI_DAILY_LIMIT_PER_HOUSEHOLD']) {
+    expect(compose).toContain(`- ${key}=$` + `{${key}:-}`);
+  }
+});
+
+it('Dockerfile : corps de requête jusqu\'à 8 Mo (photos)', () => {
+  expect(dockerfile).toContain('ENV BODY_SIZE_LIMIT=8M');
+});
