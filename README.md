@@ -8,7 +8,7 @@ Stack : SvelteKit, SQLite (Drizzle), français et anglais. Licence AGPL-3.0-only
 
 ```bash
 git clone https://github.com/gavark/apogee.git && cd apogee
-cp .env.example .env        # puis éditez ORIGIN (et éventuellement ADMIN_*)
+cp .env.example .env        # puis éditez .env : ORIGIN = URL publique (le défaut est le port de dev 5173)
 mkdir -p data && chown 1000:1000 data   # le conteneur tourne avec l'utilisateur "node"
 docker compose up -d
 ```

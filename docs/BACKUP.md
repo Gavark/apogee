@@ -4,6 +4,8 @@ Toutes les données d'Apogée tiennent dans un **seul fichier SQLite** : `/data/
 
 Pour obtenir un instantané cohérent même si l'application écrit au même moment, utilisez la commande `.backup` de SQLite plutôt qu'un simple `cp`. L'image embarque le client `sqlite3`.
 
+> Sous Linux, le dossier `data/` appartient à l'uid 1000 : les commandes de l'hôte qui y touchent (`mv`, `cp`, `rm`, `chown`) peuvent nécessiter `sudo`.
+
 ## Sauvegarde ponctuelle
 
 ```bash
@@ -35,10 +37,13 @@ Planifiez la commande ci-dessus avec cron sur l'hôte, puis copiez le dossier `b
 
 ```bash
 docker compose stop apogee
+rm -f data/apogee.sqlite-wal data/apogee.sqlite-shm
 cp backups/apogee-<DATE>.sqlite data/apogee.sqlite
 chown 1000:1000 data/apogee.sqlite
 docker compose start apogee
 ```
+
+Supprimez toujours les fichiers `-wal` et `-shm` avant la copie : la base est en mode WAL, et un WAL résiduel rejoué sur le fichier restauré pourrait le corrompre ou mélanger d'anciennes données.
 
 Les migrations sont additives et rejouées au démarrage : une sauvegarde plus ancienne reste compatible avec une version plus récente.
 
