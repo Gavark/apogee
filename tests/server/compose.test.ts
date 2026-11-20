@@ -1,8 +1,12 @@
 import { it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 
-const compose = readFileSync('docker-compose.yml', 'utf8');
-const dockerfile = readFileSync('Dockerfile', 'utf8');
+const compose = readFileSync('docker-compose.yml', 'utf8').replace(/
+/g, '
+');
+const dockerfile = readFileSync('Dockerfile', 'utf8').replace(/
+/g, '
+');
 
 it('docker-compose monte /data et transmet ORIGIN, ADMIN_EMAIL, ADMIN_PASSWORD, HOUSEHOLD_NAME, TZ', () => {
   expect(compose).toMatch(/\.\/data:\/data/);
