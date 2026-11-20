@@ -1,7 +1,6 @@
-// Placeholder types: `User` and `Session` come from the schema in Task 2
-// (users / sessions tables) and `Locale` from the auth module.
-type User = { id: number };
-type Session = { id: string };
+import type { User, Session } from '$lib/server/db/schema';
+
+// Placeholder: `Locale` comes from the i18n module (Task 3).
 type Locale = 'fr' | 'en';
 
 declare global {
