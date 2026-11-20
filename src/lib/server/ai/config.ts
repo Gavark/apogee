@@ -40,12 +40,12 @@ export function readAiConfig(env: Env): AiConfig {
     let valid = false;
     try {
       const u = new URL(rawUrl);
-      valid = u.protocol === 'http:' || u.protocol === 'https:';
+      valid = (u.protocol === 'http:' || u.protocol === 'https:') && !u.username && !u.password;
     } catch {
       valid = false;
     }
     if (!valid || !model) {
-      warnOnce('AI_PROVIDER=openai-compatible requires a valid http(s) AI_BASE_URL and AI_MODEL; AI disabled.');
+      warnOnce('AI_PROVIDER=openai-compatible requires a valid http(s) AI_BASE_URL without credentials, and AI_MODEL; AI disabled.');
       return { provider: 'none' };
     }
     return {
@@ -62,7 +62,7 @@ export function readAiConfig(env: Env): AiConfig {
 
 /** Daily analyses per household. 0 = unlimited. */
 export function aiDailyLimit(env: Env): number {
-  const raw = clean(env.AI_DAILY_LIMIT);
+  const raw = clean(env.AI_DAILY_LIMIT_PER_HOUSEHOLD);
   if (!/^\d+$/.test(raw)) return DEFAULT_DAILY_LIMIT;
   return Number.parseInt(raw, 10);
 }

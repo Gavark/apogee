@@ -115,9 +115,9 @@ describe('anthropic provider', () => {
 
   const h = new Headers();
   const cases: [string, () => Error, string, number | undefined][] = [
-    ['AuthenticationError', () => new Anthropic.AuthenticationError(401, {}, 'bad ' + KEY, h), 'auth', undefined],
-    ['PermissionDeniedError', () => new Anthropic.PermissionDeniedError(403, {}, 'nope ' + KEY, h), 'auth', undefined],
-    ['RateLimitError', () => new Anthropic.RateLimitError(429, {}, 'slow ' + KEY, h), 'rate_limited', undefined],
+    ['AuthenticationError', () => new Anthropic.AuthenticationError(401, {}, 'bad ' + KEY, h), 'auth', 401],
+    ['PermissionDeniedError', () => new Anthropic.PermissionDeniedError(403, {}, 'nope ' + KEY, h), 'auth', 403],
+    ['RateLimitError', () => new Anthropic.RateLimitError(429, {}, 'slow ' + KEY, h), 'rate_limited', 429],
     ['BadRequestError', () => new Anthropic.BadRequestError(400, {}, 'bad ' + KEY, h), 'unavailable', 400],
     ['InternalServerError', () => new Anthropic.InternalServerError(500, {}, 'boom ' + KEY, h), 'unavailable', 500],
     ['APIConnectionError', () => new Anthropic.APIConnectionError({ message: 'down ' + KEY }), 'unavailable', undefined]

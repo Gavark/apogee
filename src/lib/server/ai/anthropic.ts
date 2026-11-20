@@ -8,8 +8,8 @@ type Client = Pick<Anthropic, 'beta'>;
 function mapSdkError(err: unknown): AiError {
   // Most specific first. Never forward err.message: it may echo request details.
   if (err instanceof Anthropic.AuthenticationError || err instanceof Anthropic.PermissionDeniedError)
-    return new AiError('auth');
-  if (err instanceof Anthropic.RateLimitError) return new AiError('rate_limited');
+    return new AiError('auth', err.status);
+  if (err instanceof Anthropic.RateLimitError) return new AiError('rate_limited', err.status);
   if (err instanceof Anthropic.APIConnectionError) return new AiError('unavailable');
   if (err instanceof Anthropic.APIError) return new AiError('unavailable', err.status);
   return new AiError('unavailable');

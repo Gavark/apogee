@@ -52,13 +52,24 @@ export function createOpenAiCompatibleProvider(opts: {
         throw new AiError('unavailable');
       }
 
-      if (res.status === 401 || res.status === 403) throw new AiError('auth', res.status);
-      if (res.status === 429) throw new AiError('rate_limited', res.status);
-      if (res.status >= 400) throw new AiError('unavailable', res.status);
+      if (!res.ok) {
+        void res.body?.cancel().catch(() => {});
+        if (res.status === 401 || res.status === 403) throw new AiError('auth', res.status);
+        if (res.status === 429) throw new AiError('rate_limited', res.status);
+        throw new AiError('unavailable', res.status);
+      }
 
+      let data: { choices?: { message?: { content?: unknown } }[] };
+      try {
+        data = (await res.json()) as typeof data;
+      } catch (err) {
+        // Timeout/abort while reading the body is an availability problem, not a bad answer.
+        const name = (err as { name?: string } | null)?.name;
+        if (name === 'AbortError' || name === 'TimeoutError') throw new AiError('unavailable');
+        throw new AiError('invalid_response');
+      }
       let raw: unknown;
       try {
-        const data = (await res.json()) as { choices?: { message?: { content?: unknown } }[] };
         const content = data?.choices?.[0]?.message?.content;
         if (typeof content !== 'string') throw new Error('no content');
         raw = JSON.parse(content);

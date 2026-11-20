@@ -77,7 +77,27 @@ describe('openai-compatible provider', () => {
     [500, 'unavailable']
   ])('HTTP %i → %s', async (status, code) => {
     const { provider } = make(async () => new Response('x', { status }));
-    await expect(provider.analyzeLabel(input)).rejects.toMatchObject({ code });
+    await expect(provider.analyzeLabel(input)).rejects.toMatchObject({ code, status });
+  });
+
+  it('non-2xx : le corps non lu est annulé', async () => {
+    const cancel = vi.fn(async () => {});
+    const res = { ok: false, status: 500, body: { cancel } } as unknown as Response;
+    const { provider } = make(async () => res);
+    await expect(provider.analyzeLabel(input)).rejects.toMatchObject({ code: 'unavailable' });
+    expect(cancel).toHaveBeenCalled();
+  });
+
+  it('timeout pendant la lecture du corps → unavailable', async () => {
+    const res = {
+      ok: true,
+      status: 200,
+      json: async () => {
+        throw new DOMException('timeout', 'TimeoutError');
+      }
+    } as unknown as Response;
+    const { provider } = make(async () => res);
+    await expect(provider.analyzeLabel(input)).rejects.toMatchObject({ code: 'unavailable' });
   });
 
   it('réseau ou timeout → unavailable', async () => {
