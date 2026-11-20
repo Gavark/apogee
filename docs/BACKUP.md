@@ -2,7 +2,7 @@
 
 Les données d'Apogée sont dans **un fichier SQLite** (`/data/apogee.sqlite` dans le conteneur, soit `./data/apogee.sqlite` sur l'hôte avec le `docker-compose.yml` fourni) **et dans le dossier des photos d'étiquettes** (`./data/photos/` sur l'hôte). Une sauvegarde complète contient les deux : sans le dossier, les fiches restent mais les photos sont perdues.
 
-> Sous Linux, le dossier `data/` appartient à l'uid 1000 : les commandes de l'hôte qui y touchent (`mv`, `cp`, `rm`, `chown`) peuvent nécessiter `sudo`.
+> Sous Linux, le dossier `data/` appartient à l'uid 1000 et le dossier `backups/` est créé par le conteneur de sauvegarde (donc à root) : les commandes de l'hôte qui y touchent (`mv`, `cp`, `rm`, `chown`) peuvent nécessiter `sudo`.
 
 ## Ce que fait le conteneur de sauvegarde
 
@@ -14,7 +14,7 @@ Le `docker-compose.yml` fourni lance, à côté de l'application, un conteneur `
 - **Vérification** : après chaque copie, la base est contrôlée (`PRAGMA integrity_check`) et l'archive est relue. Une sauvegarde qui échoue est signalée dans les journaux (`docker logs apogee-backup`, ligne `backup FAILED`) et ne supprime jamais les anciennes.
 - **Rotation** : les 30 dernières bases et les 30 dernières archives sont conservées (`BACKUP_RETENTION` dans `.env` pour changer). Seuls les fichiers au nom horodaté sont concernés : une copie nommée à la main (voir plus bas) n'est jamais supprimée.
 
-Le conteneur lit `./data` en lecture seule : il ne peut pas abîmer vos données. Il a besoin que l'application ait déjà tourné au moins une fois (c'est le cas dès le premier démarrage) ; si vous voyez `backup FAILED` juste après avoir restauré ou déplacé `data/`, relancez `docker compose up -d` puis une sauvegarde à la demande.
+Le conteneur lit `./data` en lecture seule : il ne peut pas abîmer vos données. Il attend que l'application soit en bonne santé avant de démarrer : sur une installation neuve, la première vraie sauvegarde a lieu dès que l'application a créé sa base. Il a besoin que l'application ait déjà tourné au moins une fois ; si vous voyez `backup FAILED` juste après avoir restauré ou déplacé `data/`, démarrez l'application puis lancez une sauvegarde à la demande.
 
 Contrôler que ça tourne :
 
@@ -32,8 +32,8 @@ docker compose exec backup sh /usr/local/bin/run-backup
 Faites-le avant toute mise à jour ou manipulation risquée. Pour garder cette sauvegarde à l'abri de la rotation, donnez-lui un nom à vous :
 
 ```bash
-cp backups/apogee-<TS>.sqlite backups/apogee-avant-maj.sqlite
-cp backups/apogee-photos-<TS>.tar.gz backups/apogee-photos-avant-maj.tar.gz
+docker compose exec backup cp /backups/apogee-<TS>.sqlite /backups/apogee-avant-maj.sqlite
+docker compose exec backup cp /backups/apogee-photos-<TS>.tar.gz /backups/apogee-photos-avant-maj.tar.gz   # seulement si l'archive des photos existe
 ```
 
 ## Vérifier une sauvegarde

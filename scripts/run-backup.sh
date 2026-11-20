@@ -27,9 +27,10 @@ fail() {
 }
 
 # A bad retention value (empty, non-numeric, zero) must never turn the rotation
-# into "delete everything": fall back to the default.
+# into "delete everything": fall back to the default. (An empty value is already
+# covered by the ${BACKUP_RETENTION:-30} default above.)
 case "$RETENTION" in
-  "" | *[!0-9]* | 0*)
+  *[!0-9]* | 0*)
     log "invalid BACKUP_RETENTION '${RETENTION}', using 30"
     RETENTION=30
     ;;

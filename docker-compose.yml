@@ -52,7 +52,8 @@ services:
     container_name: apogee-backup
     restart: unless-stopped
     depends_on:
-      - apogee
+      apogee:
+        condition: service_healthy
     volumes:
       - ./data:/data:ro
       - ./backups:/backups

@@ -49,5 +49,8 @@ it('docker-compose : service backup (alpine, ./data en lecture seule, ./backups,
   expect(backup).toContain('- ./scripts/run-backup.sh:/usr/local/bin/run-backup:ro');
   expect(backup).toContain('- BACKUP_RETENTION=$' + '{BACKUP_RETENTION:-30}');
   expect(backup).toContain('- BACKUP_SCHEDULE=$' + '{BACKUP_SCHEDULE:-0 3 * * *}');
-  expect(backup).toMatch(/depends_on:\s*\n\s*- apogee/);
+  expect(backup).toMatch(/depends_on:\s*\n\s*apogee:\s*\n\s*condition: service_healthy/);
+  // `$$` keeps compose from interpolating the variables of the startup command
+  expect(backup).toContain('$' + '${BACKUP_SCHEDULE}');
+  expect(backup).toContain('$' + '${BACKUP_RETENTION}');
 });
