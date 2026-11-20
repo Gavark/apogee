@@ -28,8 +28,17 @@ it('docker-publish.yml : un job test (check + test) conditionne le build', () =>
   expect(publish).toMatch(/jobs:\n(?:.*\n)*?  test:\n/);
   expect(publish).toContain('npm ci --ignore-scripts');
   for (const cmd of ['npm run check', 'npm test']) expect(publish).toContain(cmd);
-  expect(publish).toMatch(/node-version: '22'/);
   expect(publish).toMatch(/\n {2}build:\n {4}needs: test\n/);
+});
+
+it('version majeure de Node alignée : Dockerfile, workflows et @types/node', () => {
+  const froms = [...read('Dockerfile').matchAll(/^FROM node:(\d+)-alpine/gm)].map((m) => m[1]);
+  expect(froms.length).toBeGreaterThan(0);
+  const major = froms[0];
+  expect(new Set(froms)).toEqual(new Set([major]));
+  for (const wf of [ci, publish]) expect(wf).toContain(`node-version: '${major}'`);
+  const typesNode = JSON.parse(read('package.json')).devDependencies['@types/node'] as string;
+  expect(typesNode.startsWith(`^${major}.`)).toBe(true);
 });
 
 it('release.yml : se déclenche sur les tags v*', () => {

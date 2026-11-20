@@ -35,7 +35,7 @@ jobs:
       - name: Set up Node
         uses: actions/setup-node@v6
         with:
-          node-version: '22'
+          node-version: '26'
           cache: 'npm'
 
       # Same flags as the Dockerfile and ci.yml: prebuilt better-sqlite3 binary.
