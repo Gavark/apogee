@@ -4,7 +4,8 @@ import {
   dataBodyToServe,
   dataBodyToStore,
   isOfflineReadable,
-  isStorable
+  isStorable,
+  offlineRedirectFor
 } from '$lib/offline/page-cache';
 
 const ORIGIN = 'https://cave.example';
@@ -170,5 +171,19 @@ describe('dataBodyToServe', () => {
   it('refuse un nombre de nœuds différent (nouvelle version de l’app) ou un corps illisible', () => {
     expect(dataBodyToServe(cached, '01')).toBeNull();
     expect(dataBodyToServe('nope', '1')).toBeNull();
+  });
+});
+
+describe('offlineRedirectFor', () => {
+  it('« / » (start_url des installations existantes) → /app, servie depuis la copie', () => {
+    expect(offlineRedirectFor(u('/'), ORIGIN)).toBe('/app');
+  });
+
+  it.each(['/app', '/login', '/app/cave', '/account'])('%s → aucune redirection', (p) => {
+    expect(offlineRedirectFor(u(p), ORIGIN)).toBeNull();
+  });
+
+  it('autre origine → aucune redirection', () => {
+    expect(offlineRedirectFor(u('/', 'https://evil.example'), ORIGIN)).toBeNull();
   });
 });

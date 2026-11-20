@@ -98,6 +98,15 @@ export function dataBodyToServe(cached: string, invalidated: string | null): str
   return JSON.stringify({ type: 'data', nodes }) + '\n';
 }
 
+/**
+ * Where to send a navigation the service worker cannot answer (network down), or null. `/` has no
+ * page of its own (the server redirects it to /app or /login) and was the installed app's start_url:
+ * offline it goes to /app, served from the copy (logged out, /app sends to /login once online).
+ */
+export function offlineRedirectFor(url: Pick<URL, 'origin' | 'pathname'>, origin: string): string | null {
+  return url.origin === origin && url.pathname === '/' ? '/app' : null;
+}
+
 /** Drops every cached page (logout, another account). Works from a page and from the service worker. */
 export async function clearPageCache(): Promise<void> {
   if (typeof caches === 'undefined') return;

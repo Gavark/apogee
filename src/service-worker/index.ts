@@ -12,7 +12,8 @@ import {
   invalidatedBits,
   isDataRequest,
   isOfflineReadable,
-  isStorable
+  isStorable,
+  offlineRedirectFor
 } from '../lib/offline/page-cache';
 import { getActiveUser } from '../lib/offline/queue';
 import { syncNow } from '../lib/offline/sync';
@@ -94,8 +95,25 @@ self.addEventListener('fetch', (event) => {
     event.respondWith(caches.match(event.request).then((hit) => hit ?? fetch(event.request)));
     return;
   }
-  if (isOfflineReadable(url, self.location.origin)) event.respondWith(networkFirst(event, url));
+  if (isOfflineReadable(url, self.location.origin)) {
+    event.respondWith(networkFirst(event, url));
+    return;
+  }
+  const redirectTo = event.request.mode === 'navigate' ? offlineRedirectFor(url, self.location.origin) : null;
+  if (redirectTo) event.respondWith(orRedirect(event.request, redirectTo));
 });
+
+/**
+ * A page with nothing to keep (`/`, which only redirects): the network, else a redirect to a
+ * reading page the copy can answer. The installed app may still start there offline.
+ */
+async function orRedirect(request: Request, to: string): Promise<Response> {
+  try {
+    return await fetch(request);
+  } catch {
+    return Response.redirect(new URL(to, self.location.origin).href, 302);
+  }
+}
 
 const pageKey = (url: URL) => new URL(cacheKeyFor(url), self.location.origin).href;
 
