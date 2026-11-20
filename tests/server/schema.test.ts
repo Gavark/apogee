@@ -45,11 +45,16 @@ describe('schema constraints', () => {
     const wineId = seedWine(h, u);
     const lotId = db.insert(schema.stockLots).values({ wineId, locationId: loc, quantity: 1 }).returning({ id: schema.stockLots.id }).get().id;
     db.insert(schema.consumptions).values({ wineId, lotId, locationId: loc, userId: u, consumedOn: '2026-01-01' }).run();
-    db.insert(schema.invitations).values({ token: 't', createdBy: u, expiresAt: 9999999999, householdId: h }).run();
+    // Invitation created by a user of ANOTHER household, so only households.id can cascade it.
+    const other = makeUser(tdb, makeHousehold(tdb, 'Autre'));
+    db.insert(schema.invitations).values({ token: 't', createdBy: other, expiresAt: 9999999999, householdId: h }).run();
     db.insert(schema.appliedOps).values({ opId: 'op1', householdId: h, result: '{}' }).run();
 
-    // Remove lots/consumptions' dependants are cascaded from the household; users must go first.
+    expect(count('invitations')).toBe(1);
+
+    // Members must be removed first (households <- users is RESTRICT).
     sqlite.prepare('DELETE FROM users WHERE household_id = ?').run(h);
+    expect(count('invitations')).toBe(1);
     sqlite.prepare('DELETE FROM households WHERE id = ?').run(h);
 
     for (const t of ['locations', 'wines', 'stock_lots', 'consumptions', 'invitations', 'applied_ops']) {
@@ -78,5 +83,29 @@ describe('schema constraints', () => {
     const wineId = seedWine(h, null);
     db.insert(schema.stockLots).values({ wineId, locationId: loc, quantity: 1 }).run();
     expect(() => sqlite.prepare('DELETE FROM locations WHERE id = ?').run(loc)).toThrow(/FOREIGN KEY/);
+  });
+
+  it('supprimer un lot met consumptions.lot_id à NULL', () => {
+    const { db, sqlite, schema } = tdb;
+    const h = makeHousehold(tdb);
+    const loc = makeLocation(tdb, h, 'Cave');
+    const wineId = seedWine(h, null);
+    const lotId = db.insert(schema.stockLots).values({ wineId, locationId: loc, quantity: 1 }).returning({ id: schema.stockLots.id }).get().id;
+    db.insert(schema.consumptions).values({ wineId, lotId, consumedOn: '2026-01-01' }).run();
+
+    sqlite.prepare('DELETE FROM stock_lots WHERE id = ?').run(lotId);
+
+    expect(sqlite.prepare('SELECT lot_id FROM consumptions').get()).toEqual({ lot_id: null });
+    expect(count('consumptions')).toBe(1);
+  });
+
+  it('refuse un lot en double (vin, lieu, position)', () => {
+    const { db, schema } = tdb;
+    const h = makeHousehold(tdb);
+    const loc = makeLocation(tdb, h, 'Cave');
+    const wineId = seedWine(h, null);
+    const lot = { wineId, locationId: loc, position: 'A1', quantity: 1 };
+    db.insert(schema.stockLots).values(lot).run();
+    expect(() => db.insert(schema.stockLots).values(lot).run()).toThrow(/UNIQUE/);
   });
 });
