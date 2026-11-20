@@ -1,7 +1,5 @@
 import type { User, Session } from '$lib/server/db/schema';
-
-// Placeholder: `Locale` comes from the i18n module (Task 3).
-type Locale = 'fr' | 'en';
+import type { Locale } from '$lib/server/auth/locale';
 
 declare global {
   namespace App {
