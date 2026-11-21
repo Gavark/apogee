@@ -47,6 +47,15 @@ Les migrations de base de données sont appliquées automatiquement à chaque d�
 
 `ADDRESS_HEADER` et `XFF_DEPTH` sont définis dans `docker-compose.yml` parce que le port est lié à `127.0.0.1`, derrière Caddy. Sans eux, tous les clients partageraient la même IP (celle du proxy) et la même limite de tentatives. **Si vous exposez le conteneur directement, sans reverse proxy, supprimez ces deux variables** : sinon un client pourrait forger `X-Forwarded-For` pour contourner la limite.
 
+## Installer sur le téléphone
+
+Apogée s'installe comme une application, depuis le navigateur, sans passer par un store.
+
+- **Android** : ouvrez Apogée dans **Chrome**, connectez-vous, puis menu **⋮ > Installer l'application**. Chrome crée une vraie application (icône seule, présente dans la liste des applis). Les autres navigateurs Android (Vivaldi, Brave, Firefox…) ne créent qu'un raccourci, marqué du logo du navigateur. Il fonctionne, mais l'icône n'est pas celle d'Apogée seule.
+- **iPhone et iPad** : ouvrez Apogée dans **Safari**, puis **Partager > Sur l'écran d'accueil**.
+
+Chaque navigateur a sa propre session, sa copie hors ligne et sa file de gestes : après une installation depuis un autre navigateur, il faut se reconnecter, puis réactiver les notifications sur ce nouvel appareil.
+
 ## Mode hors ligne
 
 Apogée est une PWA : une fois installée, elle reste utilisable sans réseau (cave, sous-sol, TGV).
@@ -70,6 +79,7 @@ Apogée peut prévenir quand un vin entre dans une nouvelle phase de dégustatio
 
 - **HTTPS obligatoire** : les navigateurs n'acceptent les notifications que sur une page HTTPS (ou `http://localhost`). Derrière le reverse proxy, `ORIGIN` doit être l'adresse HTTPS publique.
 - **iPhone et iPad (iOS 16.4 ou plus)** : ouvrez Apogée dans Safari, ajoutez-le à l'écran d'accueil, puis activez les notifications depuis l'application installée. Dans l'onglet Safari, la page l'explique et le bouton n'apparaît pas.
+- **Android : rien ne s'affiche ?** Si le test part mais n'arrive pas, la catégorie de notifications **« Sites »** du navigateur est souvent désactivée : Paramètres Android > Applications > Chrome (ou le navigateur utilisé) > Notifications > activer « Sites ». Pensez aussi à retirer de la liste des appareils les anciens abonnements d'un navigateur que vous n'utilisez plus.
 - **Heure d'envoi** : au plus une notification par personne et par jour, à partir de 18 h dans le fuseau horaire du compte. Si le serveur était éteint, un seul message regroupe les changements survenus entre-temps.
 - Les clés VAPID sont générées au premier usage et conservées dans la base ; il n'y a rien à configurer. `VAPID_SUBJECT` est facultatif (voir le tableau ci-dessus).
 - Le bouton « Envoyer une notification de test » vérifie qu'un appareil reçoit bien les messages (3 essais par heure).
