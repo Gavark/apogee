@@ -33,6 +33,7 @@
 <li class="row">
   <a class="main" href="/app/wines/{wine.id}">
     <strong class="name">{wineTitle(wine)}</strong>
+    {#if wine.appellation}<span class="appellation">{wine.appellation}</span>{/if}
     <span class="meta">{meta}</span>
     {#if where}<span class="meta">{where}</span>{/if}
     {#if windowText}<span class="window">{windowText}</span>{/if}
@@ -70,6 +71,7 @@
     min-height: var(--tap);
   }
   .name { overflow-wrap: anywhere; font-weight: var(--fw-semibold); }
+  .appellation { font-size: var(--fs-sm); overflow-wrap: anywhere; }
   .meta { color: var(--c-text-muted); font-size: var(--fs-sm); overflow-wrap: anywhere; }
   .window { font-size: var(--fs-sm); font-weight: var(--fw-medium); }
   .drink { grid-column: 2; grid-row: 1; }
