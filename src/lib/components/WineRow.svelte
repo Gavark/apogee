@@ -2,6 +2,7 @@
   import * as m from '$paraglide/messages';
   import DrinkButton from '$lib/components/DrinkButton.svelte';
   import { colorLabel, wineTitle } from '$lib/wine-labels';
+  import { singleGrape } from '$lib/grapes';
   import type { CellarRow } from '$lib/server/wines';
 
   /** `onestimate` adds the "estimate with AI" button to wines without a window. */
@@ -16,6 +17,8 @@
       .map((l) => (l.position ? `${l.locationName} · ${l.position}` : l.locationName))
       .join(', ')
   );
+  // "Alsace · Riesling": the grape is shown only when there is exactly one (see singleGrape).
+  const identity = $derived([wine.appellation, singleGrape(wine.grapes)].filter(Boolean).join(' · '));
   const meta = $derived(
     [wine.vintage ?? m.wine_nv(), colorLabel(wine.color), m.wine_bottle_count({ count: row.bottles })]
       .filter((x) => x !== null && x !== '')
@@ -33,7 +36,7 @@
 <li class="row">
   <a class="main" href="/app/wines/{wine.id}">
     <strong class="name">{wineTitle(wine)}</strong>
-    {#if wine.appellation}<span class="appellation">{wine.appellation}</span>{/if}
+    {#if identity}<span class="appellation">{identity}</span>{/if}
     <span class="meta">{meta}</span>
     {#if where}<span class="meta">{where}</span>{/if}
     {#if windowText}<span class="window">{windowText}</span>{/if}
