@@ -224,9 +224,21 @@ async function accept(rows: QueuedOp[], results: OpResult[], userId: number, out
   return inverses.length;
 }
 
-/** The first row from `rows[from]` on that can test the server in place of `headId`: not a review of it. */
+/**
+ * The canary for `headId` among the rows from `rows[from]` on: the one with the fewest attempts, the
+ * first in queue order on a tie, so a failed canary (one more attempt) gives way to another at the
+ * next sync. Never a review whose consume is still queued before it (the head or an earlier row):
+ * a review never goes out before its consume.
+ */
 function canaryFor(rows: QueuedOp[], from: number, headId: string): QueuedOp | undefined {
-  return rows.slice(from).find((q) => !(q.op.kind === 'review' && q.op.consumeOpId === headId));
+  const before = new Set([headId]);
+  let best: QueuedOp | undefined;
+  for (const q of rows.slice(from)) {
+    const waitsForConsume = q.op.kind === 'review' && q.op.consumeOpId !== undefined && before.has(q.op.consumeOpId);
+    if (!waitsForConsume && (!best || q.attempts < best.attempts)) best = q;
+    before.add(q.op.opId);
+  }
+  return best;
 }
 
 /**
@@ -318,8 +330,8 @@ async function sendQueued(queued: QueuedOp[], userId: number, doFetch: typeof fe
  * MAX_STRIKES the head is quarantined (listed in `quarantined`) and the queue is listed again, so
  * what follows is still sent in this sync (within MAX_PASSES); otherwise the sync stops on `retry`.
  * Circuit breaker: no new quarantine while another gesture is quarantined and no batch was accepted
- * since (see breakerOpen). The head keeps its strikes and one canary, the next sendable row that is
- * not a review of it, goes alone: accepted, the head is quarantined and the sync goes on; otherwise
+ * since (see breakerOpen). The head keeps its strikes and one canary goes alone (see canaryFor: the
+ * sendable row after it with the fewest attempts, never a review whose consume is still queued): accepted, the head is quarantined and the sync goes on; otherwise
  * (general outage) the sync stops on `retry` with no strike on either. No canary: `retry` too.
  * 400 and rejected ops never strike.
  */

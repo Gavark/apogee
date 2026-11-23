@@ -115,7 +115,7 @@ Conteneur de test et dossiers temporaires supprimés ensuite.
 - **Observé** : elle ne part qu'à la réouverture (13 h 30 min 38 côté serveur). La donnée arrive quand même, sans doublon : ce n'est pas bloquant.
 - **À creuser** : la vérification n'a été faite qu'une fois. Chrome Android peut retarder un événement `sync` (économie de batterie, engagement du site, processus tué). Il faut vérifier que `requestBackgroundSync()` est bien appelé au moment du geste, puis regarder dans `chrome://inspect` › Service workers ou dans les journaux serveur quand la requête arrive. Si c'est inévitable, il suffit de corriger la promesse dans l'interface.
 - **Gravité** : faible.
-- **Correctif** : le service worker réessaie pendant l'événement `sync` (2, 4, 8, 15, 30, 60 s) ; à revérifier sur le téléphone après déploiement (`applied_ops.applied_at`).
+- **Correctif** : le service worker réessaie pendant l'événement `sync` (2, 4, 8, 15, 30, 60 s, dans la limite de 150 s) ; à revérifier sur le téléphone après déploiement (`applied_ops.applied_at`).
 
 ## Bilan
 

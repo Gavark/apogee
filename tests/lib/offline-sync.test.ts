@@ -1,7 +1,7 @@
 import 'fake-indexeddb/auto';
 import { IDBFactory } from 'fake-indexeddb';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { enqueue, getLastSentAt, listQueued, markUndo, quarantine, strike, _resetForTests } from '$lib/offline/queue';
+import { bumpAttempts, enqueue, getLastSentAt, listQueued, markUndo, quarantine, strike, _resetForTests } from '$lib/offline/queue';
 import { MAX_STRIKES, postOps, serverReachable, syncNow } from '$lib/offline/sync';
 import type { OpResult, StockOp } from '$lib/server/stock';
 
@@ -738,5 +738,67 @@ describe('canari quand le disjoncteur est ouvert', () => {
     expect(out.undone).toContain('Z');
     expect(ids(s.batches).slice(0, 2)).toEqual([['X'], ['Z']]);
     expect(s.batches.flat().some((o) => o.kind === 'unconsume')).toBe(true); // the inverse went in the next pass
+  });
+});
+
+describe('rotation du canari', () => {
+  /** Answers 500 to any batch holding one of `culprits`, applies the others. */
+  const failsOnAny =
+    (...culprits: string[]) =>
+    (ops: StockOp[]) =>
+      ops.some((o) => culprits.includes(o.opId)) ? status500() : allApplied(ops);
+
+  it('[Y, X, Z, W], Y, X et Z en 500, W en 200, /healthz 200 : W finit par passer, X en quarantaine, Z jamais pour un seul échec de canari', async () => {
+    let t = 3_000_000;
+    vi.spyOn(Date, 'now').mockImplementation(() => (t += 10));
+    for (const id of ['Y', 'X', 'Z', 'W']) await enqueue(1, adj(id));
+    const s = serverWithHealth(failsOnAny('Y', 'X', 'Z'), true);
+    const done = async () => {
+      const q = await listQueued(1);
+      return !q.some((r) => r.op.opId === 'W') && q.some((r) => r.op.opId === 'X' && r.quarantinedAt !== undefined);
+    };
+    for (let i = 0; i < 15 && !(await done()); i++) await syncNow(1, { fetch: s.fetch });
+    expect(await done()).toBe(true);
+    const q = await listQueued(1);
+    expect(q.map((r) => [r.op.opId, r.quarantinedAt !== undefined])).toEqual([
+      ['Y', true],
+      ['X', true],
+      ['Z', false]
+    ]);
+    expect((q[2].strikes ?? 0) < MAX_STRIKES).toBe(true);
+    expect(s.batches.flat().filter((o) => o.opId === 'W').length).toBeGreaterThan(0);
+  });
+
+  it('canari : le moins de tentatives, le premier de la file à égalité', async () => {
+    await enqueue(1, adj('Y'));
+    for (let i = 0; i < MAX_STRIKES; i++) await strike('Y');
+    await quarantine('Y');
+    await enqueue(1, adj('X'));
+    for (let i = 1; i < MAX_STRIKES; i++) await strike('X');
+    for (const id of ['P', 'Q', 'R']) await enqueue(1, adj(id));
+    await bumpAttempts(['P']);
+    const s = serverWithHealth(failsOnAny('X', 'P', 'Q', 'R'), true);
+    await syncNow(1, { fetch: s.fetch });
+    expect(ids(s.batches)).toEqual([['X'], ['Q']]); // Q and R tie at 0 attempts: Q first
+    await syncNow(1, { fetch: s.fetch });
+    expect(ids(s.batches).slice(2)).toEqual([['X'], ['R']]);
+  });
+
+  it('un review dont le consume (pas la tête) est encore en file avant lui n’est jamais canari, même avec moins de tentatives', async () => {
+    await enqueue(1, adj('Y'));
+    for (let i = 0; i < MAX_STRIKES; i++) await strike('Y');
+    await quarantine('Y');
+    await enqueue(1, adj('X'));
+    for (let i = 1; i < MAX_STRIKES; i++) await strike('X');
+    await enqueue(1, consume('C'));
+    await enqueue(1, review('R', 'C'));
+    await bumpAttempts(['C']);
+    await bumpAttempts(['C']);
+    await bumpAttempts(['C']);
+    const s = serverWithHealth(failsOnAny('X'), true);
+    const out = await syncNow(1, { fetch: s.fetch });
+    expect(ids(s.batches).slice(0, 2)).toEqual([['X'], ['C']]);
+    expect(out.quarantined).toEqual(['X']);
+    expect(ids(s.batches).flat().indexOf('R')).toBeGreaterThan(ids(s.batches).flat().indexOf('C'));
   });
 });
