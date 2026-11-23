@@ -229,3 +229,12 @@ it('stampedHeaders garde les en-têtes et ajoute x-apogee-stored-at')
 - [ ] Revue de la branche entière (sous-agent).
 - [ ] Dependabot : `gh api repos/Gavark/apogee/dependabot/alerts --jq '[.[]|select(.state=="open")]|length'` et PR Dependabot ouvertes ; corriger ce qui touche le projet ou le signaler.
 - [ ] `git fetch` + rebase sur `origin/main`, re-tests, puis demander avant push et PR.
+
+---
+
+## Bilan (2026-11-23)
+
+- Tâches 1 à 4 faites en TDD, chacune relue ; revue finale de la branche puis une vague de corrections (garde-fou élargi : rien n'est supprimé si aucune photo présente sur le disque n'appartient à un vin).
+- Écart au plan : l'éviction se fait **par page** (HTML et `__data.json` ensemble) et `dropCachedHtml`/`refetch` conservent l'horodatage d'origine, sinon chaque déploiement re-datait toutes les pages HTML.
+- Vérifié : `npm run check` 0 erreur, vitest 805/805 ; navigateur (build + `node build`, base temporaire) : en-tête `x-apogee-stored-at` présent, 140 entrées ramenées à 120 avec `/app` gardée, démarrage hors ligne depuis `/` et fiches OK ; ménage réel au premier passage : orpheline de 30 jours supprimée et journalisée, photo d'un vin et photo récente gardées, `photo_path` de l'analyse remis à NULL.
+- Dependabot : aucune alerte ni PR ouverte.
