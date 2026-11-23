@@ -149,7 +149,10 @@
           </span>
         </label>
       </form>
-      <p class="muted hint">{m.notif_schedule_hint({ timezone: data.timezone })}</p>
+      <p class="muted hint">
+        {m.notif_schedule_hint({ timezone: data.timezone })}
+        <a href="/account#timezone">{m.notif_schedule_change()}</a>
+      </p>
     </Card>
   </section>
 
