@@ -16,7 +16,7 @@
 - `queue.ts`, `sync.ts`, `background-sync.ts` : aucun import de `$app/*` ni de runes (le service worker les importe). `npm run check` compile aussi `src/service-worker`.
 - Délais d'essai pendant l'événement `sync` : `[2000, 4000, 8000, 15000, 30000, 60000]` ms.
 - Nombre de coups avant quarantaine : `MAX_STRIKES = 5`. « Réessayer » remet `strikes = MAX_STRIKES - 1`.
-- Sonde de joignabilité : `GET /healthz`, délai 5 s, toute réponse HTTP = joignable.
+- Sonde de joignabilité : `GET /healthz`, délai 5 s, joignable seulement si la réponse est 2xx (`res.ok`). Les réponses 502, 503 et 504 ne sont pas imputables d’office : elles passent par la sonde (ruling de la revue de la tâche 3).
 - Aucun changement de `DB_VERSION` (champs facultatifs sans index).
 - Refus métier inchangés (400 → `dropped`, `rejected` → toasts existants) ; un `review` rejeté reste silencieux.
 - Commits terminés par `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`.

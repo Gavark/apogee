@@ -51,8 +51,8 @@ Un échec technique (5xx, erreur réseau, délai dépassé, réponse illisible) 
 
 **Échec imputable.** Un échec compte contre un geste (« coup ») seulement si le serveur est joignable :
 
-- une réponse 5xx est imputable ;
-- après une erreur réseau, un délai dépassé ou une réponse illisible, on interroge `/healthz` (5 s). S'il répond, l'échec est imputable. Sinon, le réseau est en cause : on attend sans compter de coup.
+- une réponse HTTP en échec (500, par exemple) ou illisible est imputable, sauf 502, 503 et 504 ;
+- après une erreur réseau, un délai dépassé, ou une réponse 502, 503 ou 504, on interroge `/healthz` (5 s). Un 502, 503 ou 504 vient souvent du proxy pendant un redémarrage de l'appli. Si `/healthz` répond 2xx, l'appli et sa base tournent, et l'échec est imputable. Sinon, l'appli ou le réseau est en cause : on attend sans compter de coup. Sans cette sonde, un déploiement ordinaire mettrait des gestes innocents en quarantaine, puisque le service worker réessaie plusieurs fois en une minute.
 
 `attempts` garde son sens actuel (« peut-être appliqué ») et continue d'augmenter à chaque échec.
 
