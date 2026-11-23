@@ -5,6 +5,7 @@ import type { BaseSQLiteDatabase } from 'drizzle-orm/sqlite-core';
 import type * as schema from './db/schema';
 import { labelAnalyses, wines } from './db/schema';
 import { isSafeRelPath } from './photos';
+import { zonedParts } from './timezone';
 
 type DB = BaseSQLiteDatabase<'sync', unknown, typeof schema>;
 
@@ -96,4 +97,25 @@ export function sweepOrphanPhotos(db: DB, dir: string, now: Date): SweepResult {
     console.log(`[photos] sweep: ${result.removed.length} removed, ${result.keptRecent} recent kept`);
   }
   return result;
+}
+
+/** Local hour (instance time zone) from which the daily sweep may run. */
+export const SWEEP_HOUR = 14;
+
+let lastSweepDate: string | null = null;
+
+/** Runs the sweep on the first pass of a local day at or after SWEEP_HOUR; null otherwise. */
+export function runPhotoSweepTick(db: DB, now: Date, dir: string, timeZone: string): SweepResult | null {
+  const { y, mo, d, h } = zonedParts(now.getTime(), timeZone);
+  if (h < SWEEP_HOUR) return null;
+  const date = `${y}-${String(mo).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+  if (date === lastSweepDate) return null;
+  // Marked before sweeping: a failing sweep must not retry every 10 minutes the same day.
+  lastSweepDate = date;
+  return sweepOrphanPhotos(db, dir, now);
+}
+
+/** Tests only. */
+export function resetPhotoSweepTick(): void {
+  lastSweepDate = null;
 }

@@ -12,6 +12,9 @@ import {
 import { bootstrapAdmin, hasNoUsers } from '$lib/server/auth/bootstrap';
 import { resolveLocale, type Locale } from '$lib/server/auth/locale';
 import { runNotificationTick } from '$lib/server/notifications/tick';
+import { runPhotoSweepTick } from '$lib/server/photo-sweep';
+import { photosDir } from '$lib/server/photos';
+import { resolveInstanceTimezone } from '$lib/server/timezone';
 import * as m from '$paraglide/messages';
 import { overwriteGetLocale, overwriteServerAsyncLocalStorage } from '$paraglide/runtime';
 
@@ -69,6 +72,18 @@ const notificationTick = () =>
   );
 setInterval(notificationTick, 10 * 60 * 1000).unref();
 setTimeout(notificationTick, 60 * 1000).unref();
+
+// Daily photo cleanup: from 14:00 local, far from the 03:00 backup and from the one the backup
+// container runs at boot (the first pass waits 10 minutes). unref(): never keep the process alive.
+const photoSweepTick = () => {
+  try {
+    runPhotoSweepTick(db, new Date(), photosDir(), resolveInstanceTimezone());
+  } catch (e) {
+    console.error('[photos] sweep failed:', e instanceof Error ? e.name : 'unknown');
+  }
+};
+setInterval(photoSweepTick, 10 * 60 * 1000).unref();
+setTimeout(photoSweepTick, 10 * 60 * 1000).unref();
 
 export const handle: Handle = async ({ event, resolve }) => {
   await maybeBootstrap();

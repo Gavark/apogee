@@ -7,7 +7,7 @@ import { eq } from 'drizzle-orm';
 import { makeTestDb } from '../helpers/db';
 import { makeHousehold, makeUser, makeLocation } from '../helpers/fixtures';
 import { createWine, type WineInput } from '../../src/lib/server/wines';
-import { sweepOrphanPhotos, PHOTO_GRACE_MS } from '../../src/lib/server/photo-sweep';
+import { sweepOrphanPhotos, PHOTO_GRACE_MS, runPhotoSweepTick, resetPhotoSweepTick, SWEEP_HOUR } from '../../src/lib/server/photo-sweep';
 
 const fsFail = vi.hoisted(() => ({ on: null as string | null }));
 vi.mock('node:fs', async (orig) => {
@@ -35,6 +35,7 @@ let warn: ReturnType<typeof vi.spyOn>;
 let error: ReturnType<typeof vi.spyOn>;
 
 beforeEach(() => {
+  resetPhotoSweepTick();
   tdb = makeTestDb();
   dir = mkdtempSync(join(tmpdir(), 'apogee-sweep-'));
   hid = makeHousehold(tdb);
@@ -232,5 +233,34 @@ describe('sweepOrphanPhotos', () => {
     expect(existsSync(join(dir, orphan))).toBe(false);
     expect(log).toHaveBeenCalledWith(`[photos] orphan removed: ${orphan}`);
     expect(error).toHaveBeenCalledWith('[photos] sweep could not clear analyses:', expect.any(String));
+  });
+});
+
+describe('runPhotoSweepTick', () => {
+  const PARIS = 'Europe/Paris';
+
+  it('ne fait rien avant 14 h locales', () => {
+    expect(SWEEP_HOUR).toBe(14);
+    expect(runPhotoSweepTick(tdb.db, new Date('2026-11-23T12:59:00Z'), dir, PARIS)).toBeNull();
+  });
+
+  it('lance le ménage à 14 h locales, une seule fois par jour', () => {
+    const r = runPhotoSweepTick(tdb.db, new Date('2026-11-23T13:00:00Z'), dir, PARIS);
+    expect(r).toEqual({ removed: [], keptRecent: 0, skipped: null });
+    expect(runPhotoSweepTick(tdb.db, new Date('2026-11-23T13:10:00Z'), dir, PARIS)).toBeNull();
+    expect(runPhotoSweepTick(tdb.db, new Date('2026-11-24T13:00:00Z'), dir, PARIS)).not.toBeNull();
+  });
+
+  it("rattrape l'après-midi si l'appli démarre plus tard", () => {
+    expect(runPhotoSweepTick(tdb.db, new Date('2026-11-23T21:00:00Z'), dir, PARIS)).not.toBeNull();
+  });
+
+  it('ne retente pas le même jour si le ménage lève une erreur', () => {
+    const bad = join(dir, 'file');
+    writeFileSync(bad, 'x');
+    const broken = { select: () => { throw new Error('boom'); }, selectDistinct: () => { throw new Error('boom'); } };
+    put(uuidPath(), 30);
+    expect(() => runPhotoSweepTick(broken as never, new Date('2026-11-23T13:00:00Z'), dir, PARIS)).toThrow();
+    expect(runPhotoSweepTick(tdb.db, new Date('2026-11-23T13:10:00Z'), dir, PARIS)).toBeNull();
   });
 });
