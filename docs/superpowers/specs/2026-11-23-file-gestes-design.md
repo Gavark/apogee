@@ -64,6 +64,8 @@ Un échec technique (5xx, erreur réseau, délai dépassé, réponse illisible) 
 - sort de la surcouche optimiste et du compteur « gestes en attente ». L'écran affiche alors l'état du serveur, qui est le seul état sûr ;
 - reste dans la file : la déconnexion le compte toujours parmi les gestes non synchronisés.
 
+**Disjoncteur.** `/healthz` ne vérifie que la lecture de la base. Si toute écriture échoue (base en lecture seule, disque plein, migration cassée), chaque geste prendrait ses 5 coups l'un après l'autre et toute la file passerait en quarantaine. Le serveur est alors en panne : ce n'est la faute d'aucun geste. Règle : **un nouveau geste ne passe en quarantaine que si un envoi a réussi depuis la dernière mise en quarantaine.** Sinon il garde ses coups, reste en tête de file et bloque la suite, comme avant ce chantier, jusqu'à ce que le serveur réponde de nouveau. La date du dernier envoi réussi (`lastSentAt`) est gardée dans le magasin `meta` d'IndexedDB, partagé par les onglets et le service worker. Seul le premier geste touché pendant une panne générale finit donc en quarantaine, et « Réessayer » le renvoie une fois la panne réparée.
+
 Les refus métier ne changent pas : un lot refusé en 400 est abandonné avec le toast `offline_op_failed`, et un geste `rejected` produit le toast habituel. Un `review` rejeté reste silencieux. La quarantaine ne concerne que les échecs techniques répétés.
 
 **Gestes qui dépendent d'un geste en quarantaine.** Un `review` dont le `consumeOpId` vise un « Bue » en quarantaine serait refusé (`not_found`), puis supprimé en silence, et le verdict serait perdu. Il est donc **retenu avec son « Bue »** :
