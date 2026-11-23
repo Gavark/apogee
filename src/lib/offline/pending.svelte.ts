@@ -5,8 +5,8 @@
 import { goto, invalidateAll } from '$app/navigation';
 import * as m from '$paraglide/messages';
 import { showToast } from '$lib/toast.svelte';
-import { listQueued } from './queue';
-import { onSyncOutcome, syncNow, type SyncOutcome } from './sync';
+import { listQueued, releaseQuarantine, removeQueued, splitQuarantine, type QuarantineItem } from './queue';
+import { MAX_STRIKES, onSyncOutcome, syncIdle, syncNow, withSyncLock, type SyncOutcome } from './sync';
 import type { OpResult, StockOp } from '$lib/server/stock';
 
 const RETRY_EVERY_MS = 30_000;
@@ -24,7 +24,11 @@ const MAX_RESULTS = 200;
  */
 type Entry = { op: StockOp; gen: number | null; stored: boolean; hidden?: boolean };
 
-const state = $state<{ entries: Entry[] }>({ entries: [] });
+/**
+ * `quarantine`: the owner's quarantined gestures, with the reviews they hold back. Neither is in
+ * `entries`: off the overlay and the pending count, the screen shows the server's state.
+ */
+const state = $state<{ entries: Entry[]; quarantine: QuarantineItem[] }>({ entries: [], quarantine: [] });
 let gen = 0;
 /** Bumped on every local change, so a slower read of the queue cannot overwrite a newer state. */
 let version = 0;
@@ -35,6 +39,8 @@ const results = new Map<string, OpResult>();
 const claimed = new Set<string>();
 /** Gestures made in this tab by the owner (most recent last): only those may be replayed to undo them. */
 const ownGestures = new Set<string>();
+/** Gestures being retried by the user: a new quarantine gets retryQuarantined's own toast. */
+const retrying = new Set<string>();
 /** The user the state above belongs to. */
 let owner: number | null = null;
 /** The follow-ups (queue re-read, warning, reload) of the syncs, chained in order. */
@@ -50,8 +56,14 @@ export function usePendingFor(userId: number): void {
   owner = userId;
   version++;
   state.entries = [];
+  state.quarantine = [];
   results.clear();
   ownGestures.clear();
+}
+
+/** The owner's quarantined gestures, each with the reviews held back with it (reactive). */
+export function quarantinedItems(): QuarantineItem[] {
+  return state.quarantine;
 }
 
 /** Ops to overlay on the page data (reactive). */
@@ -153,17 +165,22 @@ export async function reload(): Promise<void> {
  * rows flagged `undo` stay hidden, also after the app was closed). Stored entries gone from the
  * queue with no result here were sent by another context (tab, service worker), which also queued
  * the inverse of an undone one: treated as applied. Returns them, so the caller reloads the data.
+ * Quarantined gestures, and the reviews they hold back, leave the entries for `state.quarantine`
+ * (still queued: never taken for sent elsewhere).
  */
 export async function refreshPending(userId: number): Promise<StockOp[]> {
   for (let i = 0; i < 3; i++) {
     if (userId !== owner) return []; // a late follow-up for a previous user
     const v = version;
-    const queued = await listQueued(userId);
+    const all = await listQueued(userId);
     if (v !== version) continue; // changed meanwhile (maybe the user): check again
+    const { sendable: queued, quarantined } = splitQuarantine(all);
+    const blocked = new Set(quarantined.flatMap((i) => [i.row.op.opId, ...i.held.map((h) => h.op.opId)]));
     const inQueue = new Map(queued.map((q) => [q.op.opId, q]));
     const vanished: StockOp[] = [];
     const kept = state.entries.flatMap((e): Entry[] => {
       if (e.gen !== null) return [e];
+      if (blocked.has(e.op.opId)) return [];
       const q = inQueue.get(e.op.opId);
       if (q) return [q.undo ? { ...e, hidden: true } : e];
       if (!e.stored) return [e]; // being written right now
@@ -177,6 +194,7 @@ export async function refreshPending(userId: number): Promise<StockOp[]> {
         .filter((q) => !keptIds.has(q.op.opId))
         .map((q): Entry => ({ op: q.op, gen: null, stored: true, ...(q.undo ? { hidden: true } : {}) }))
     ];
+    state.quarantine = quarantined;
     return vanished;
   }
   return [];
@@ -208,8 +226,10 @@ function handleOutcome(userId: number, out: SyncOutcome): void {
   const undone = new Set(out.undone);
   const others = out.results.filter((r) => !claimed.has(r.opId) && !undone.has(r.opId));
   const othersDropped = out.dropped.filter((o) => !claimed.has(o.opId) && !undone.has(o.opId));
-  const changed = others.length > 0 || othersDropped.length > 0 || undone.size > 0;
-  settling = settling.then(() => afterSync(userId, others, othersDropped, changed, reviews)).catch(() => {});
+  // A gesture the user is retrying gets retryQuarantined's own toast, should it fail again.
+  const quarantined = out.quarantined.some((id) => !retrying.has(id));
+  const changed = others.length > 0 || othersDropped.length > 0 || undone.size > 0 || quarantined;
+  settling = settling.then(() => afterSync(userId, others, othersDropped, changed, reviews, quarantined)).catch(() => {});
 }
 
 onSyncOutcome(handleOutcome);
@@ -236,7 +256,14 @@ function swOutcome(data: unknown): { userId: number; outcome: SyncOutcome } | nu
  * Re-reads the queue; for ops nobody is waiting on, warns about failures; reloads the data when
  * something changed out of a caller's sight.
  */
-async function afterSync(userId: number, others: OpResult[], othersDropped: StockOp[], changed: boolean, reviews: Set<string>): Promise<void> {
+async function afterSync(
+  userId: number,
+  others: OpResult[],
+  othersDropped: StockOp[],
+  changed: boolean,
+  reviews: Set<string>,
+  quarantined: boolean
+): Promise<void> {
   if (userId !== owner) return; // the user changed since: nothing of theirs on screen any more
   const vanished = await refreshPending(userId).catch((): StockOp[] => []);
   if (!changed && vanished.length === 0) return;
@@ -244,6 +271,7 @@ async function afterSync(userId: number, others: OpResult[], othersDropped: Stoc
   const failed = othersDropped.length > 0 || others.some((r) => r.status === 'rejected' && r.reason !== 'empty_lot' && !reviews.has(r.opId));
   if (emptied) showToast(m.drink_empty_lot());
   else if (failed) showToast(m.offline_op_failed());
+  else if (quarantined) showToast(m.offline_op_quarantined());
   await reload();
 }
 
@@ -258,6 +286,51 @@ export async function syncPending(userId: number): Promise<SyncOutcome> {
   } while (s !== settling);
   if (out.status === 'unauthorized') await goto('/login');
   return out;
+}
+
+/**
+ * « Réessayer »: lifts the quarantine with MAX_STRIKES - 1 strikes, so the gesture goes alone and
+ * one more imputable failure quarantines it again (toast « Toujours impossible à envoyer »), then
+ * syncs at once. Without the server it is an ordinary pending gesture again.
+ */
+export async function retryQuarantined(userId: number, opId: string): Promise<void> {
+  usePendingFor(userId);
+  retrying.add(opId);
+  try {
+    const released = await withSyncLock(() => releaseQuarantine(opId, MAX_STRIKES - 1));
+    await refreshPending(userId);
+    if (!released) return; // gone meanwhile (sent or abandoned elsewhere)
+    const out = await syncPending(userId);
+    if (out.status === 'busy') {
+      // A sync already running may have listed the queue before the release: run another one after it.
+      await syncIdle();
+      await syncPending(userId);
+    }
+    const row = (await listQueued(userId)).find((q) => q.op.opId === opId);
+    if (row?.quarantinedAt !== undefined) showToast(m.quarantine_still_failing());
+    else if (row) requestBackgroundSync(); // still pending: sent once the network allows
+  } finally {
+    retrying.delete(opId);
+  }
+}
+
+/**
+ * « Abandonner »: deletes the quarantined gesture and the reviews it holds back, never sent. No
+ * inverse is queued, even for an undone one: nothing of it is known to be applied. Then reloads.
+ */
+export async function abandonQuarantined(userId: number, opId: string): Promise<void> {
+  usePendingFor(userId);
+  // Under the lock, from the queue itself: a review added since the list was drawn goes too.
+  const removed = await withSyncLock(async () => {
+    const item = splitQuarantine(await listQueued(userId)).quarantined.find((i) => i.row.op.opId === opId);
+    if (!item) return false; // released or gone meanwhile: nothing to abandon
+    await removeQueued([opId, ...item.held.map((h) => h.op.opId)]);
+    return true;
+  });
+  await refreshPending(userId);
+  if (!removed) return;
+  await reload();
+  showToast(m.quarantine_abandoned());
 }
 
 /**
@@ -301,9 +374,11 @@ export function startSyncLoop(userId: number): () => void {
 export function _resetPendingForTests(): void {
   owner = null;
   state.entries = [];
+  state.quarantine = [];
   results.clear();
   ownGestures.clear();
   claimed.clear();
+  retrying.clear();
   gen = 0;
   version++;
 }

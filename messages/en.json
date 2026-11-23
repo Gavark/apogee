@@ -466,6 +466,9 @@
   "offline_saved": "Saved, will sync",
   "offline_undo_deferred": "The undo will be applied when syncing",
   "offline_op_failed": "An operation could not be applied",
+  "offline_op_quarantined": "A change could not be sent",
+  "quarantine_still_failing": "Still unable to send",
+  "quarantine_abandoned": "Change discarded",
   "offline_pending": [
     {
       "declarations": [

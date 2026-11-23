@@ -466,6 +466,9 @@
   "offline_saved": "Enregistré, sera synchronisé",
   "offline_undo_deferred": "L'annulation sera appliquée à la synchronisation",
   "offline_op_failed": "Une opération n'a pas pu être appliquée",
+  "offline_op_quarantined": "Un geste n'a pas pu être envoyé",
+  "quarantine_still_failing": "Toujours impossible à envoyer",
+  "quarantine_abandoned": "Geste abandonné",
   "offline_pending": [
     {
       "declarations": [
