@@ -17,10 +17,10 @@
 
 ## Comportement
 
-- Un seul choix à la fois. *Tout* est sélectionné par défaut. Toucher la puce active revient à *Tout*.
+- Choix cumulatifs (révision du 2026-11-22) : chaque puce s'active ou se désactive séparément, et plusieurs phases peuvent s'afficher ensemble, dans l'ordre des sections. *Tout* est sélectionné par défaut, et le toucher vide la sélection. Désactiver la dernière puce active revient aussi à *Tout*.
 - Une phase filtrée n'affiche que sa section. *Patience* s'affiche alors dépliée, et non repliée.
 - Le compteur « N bouteilles » de l'en-tête suit le filtre.
-- Si la phase choisie disparaît (dernier vin bu ou déplacé de phase), la page revient à *Tout*.
+- Une phase choisie qui disparaît (dernier vin bu ou vin passé à une autre phase) sort de la sélection. S'il ne reste aucune phase choisie, la page revient à *Tout*.
 - Les puces ne s'affichent pas quand la cave ne contient qu'une seule phase, ni quand elle est vide.
 - Les gestes en attente (hors ligne) restent appliqués comme aujourd'hui : on filtre les sections déjà recalculées.
 - Accessibilité : chaque puce est un bouton avec `aria-pressed`. Sur mobile, la rangée défile horizontalement au lieu de passer à la ligne.
