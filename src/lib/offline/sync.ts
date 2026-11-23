@@ -2,9 +2,11 @@
 import { inverseOf } from './inverse';
 import {
   bumpAttempts,
+  getLastSentAt,
   listQueued,
   quarantine,
   removeQueued,
+  setLastSentAt,
   splitQuarantine,
   strike,
   type QueuedInverse,
@@ -153,6 +155,24 @@ export async function serverReachable(doFetch: typeof fetch = fetch): Promise<bo
 }
 
 /**
+ * Circuit breaker: /healthz only checks that the database reads, so a server failing every write
+ * would otherwise quarantine the whole queue, one gesture after the other. A new quarantine is only
+ * allowed when a batch was accepted since the latest one: open (no quarantine) when another row of
+ * the queue is quarantined and nothing was sent since (`lastSentAt` absent or not after it).
+ */
+async function breakerOpen(userId: number, opId: string): Promise<boolean> {
+  let latest: number | undefined;
+  for (const q of await listQueued(userId)) {
+    if (q.op.opId !== opId && q.quarantinedAt !== undefined && (latest === undefined || q.quarantinedAt > latest)) {
+      latest = q.quarantinedAt;
+    }
+  }
+  if (latest === undefined) return false;
+  const sentAt = await getLastSentAt();
+  return sentAt === null || sentAt <= latest;
+}
+
+/**
  * At most this many passes over the queue per sync: the inverses queued by one pass, and what
  * follows a gesture it quarantined, go in the next.
  */
@@ -210,7 +230,8 @@ async function sendQueued(queued: QueuedOp[], userId: number, doFetch: typeof fe
       // Blame the head of the batch only when the server is reachable (not a network outage).
       if (res.answered || (await serverReachable(doFetch))) {
         const head = ids[0];
-        if ((await strike(head)) >= MAX_STRIKES) {
+        // Breaker open: the head keeps its strikes and blocks the queue, as for an ordinary failure.
+        if ((await strike(head)) >= MAX_STRIKES && !(await breakerOpen(userId, head))) {
           await quarantine(head);
           out.quarantined.push(head);
           return true; // list again: the reviews it holds back and the gestures after it are recomputed
@@ -227,6 +248,7 @@ async function sendQueued(queued: QueuedOp[], userId: number, doFetch: typeof fe
       if (inv) inverses.push({ userId, op: inv, inverseOf: q.op.opId });
     }
     await removeQueued(ids, inverses);
+    await setLastSentAt(Date.now()); // closes the quarantine circuit breaker
     inversesQueued += inverses.length;
     out.sent += ops.length;
     out.results.push(...res.results);
@@ -246,6 +268,8 @@ async function sendQueued(queued: QueuedOp[], userId: number, doFetch: typeof fe
  * answer; after a network error, a timeout or a 502/503/504, a 2xx from /healthz) strikes its head gesture. At
  * MAX_STRIKES the head is quarantined (listed in `quarantined`) and the queue is listed again, so
  * what follows is still sent in this sync (within MAX_PASSES); otherwise the sync stops on `retry`.
+ * Circuit breaker: no new quarantine while another gesture is quarantined and no batch was accepted
+ * since (see breakerOpen): the head keeps its strikes and the sync stops on `retry`.
  * 400 and rejected ops never strike.
  */
 export async function syncNow(userId: number, deps: { fetch?: typeof fetch } = {}): Promise<SyncOutcome> {

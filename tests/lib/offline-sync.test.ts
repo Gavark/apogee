@@ -1,7 +1,7 @@
 import 'fake-indexeddb/auto';
 import { IDBFactory } from 'fake-indexeddb';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { enqueue, listQueued, markUndo, quarantine, strike, _resetForTests } from '$lib/offline/queue';
+import { enqueue, getLastSentAt, listQueued, markUndo, quarantine, strike, _resetForTests } from '$lib/offline/queue';
 import { MAX_STRIKES, postOps, serverReachable, syncNow } from '$lib/offline/sync';
 import type { OpResult, StockOp } from '$lib/server/stock';
 
@@ -541,5 +541,83 @@ describe('quarantaine des gestes en échec répété', () => {
     expect(out.status).toBe('retry');
     expect(s.health.probes).toBe(0);
     expect((await listQueued(1))[0]).toMatchObject({ attempts: 1, strikes: 1 });
+  });
+});
+
+describe('disjoncteur contre la mise en quarantaine en série', () => {
+  /** Distinct, increasing Date.now() values: quarantinedAt and lastSentAt never tie. */
+  function steppingClock() {
+    let t = 1_000_000;
+    vi.spyOn(Date, 'now').mockImplementation(() => (t += 10));
+  }
+
+  /** Runs syncs with `fetch` until `done()` holds (at most `max` syncs). */
+  async function syncUntil(fetch: typeof globalThis.fetch, done: () => Promise<boolean>, max = 20) {
+    for (let i = 0; i < max && !(await done()); i++) await syncNow(1, { fetch });
+  }
+
+  it('premier envoi, sans lastSentAt ni autre quarantaine → la quarantaine est permise', async () => {
+    await enqueue(1, adj('a'));
+    for (let i = 1; i < MAX_STRIKES; i++) await strike('a');
+    expect(await getLastSentAt()).toBeNull();
+    const out = await syncNow(1, { fetch: serverWithHealth(status500).fetch });
+    expect(out.quarantined).toEqual(['a']);
+    expect((await listQueued(1))[0].quarantinedAt).toEqual(expect.any(Number));
+  });
+
+  it('lot accepté (2xx) → lastSentAt enregistré ; 500 ou 400 → inchangé', async () => {
+    steppingClock();
+    await enqueue(1, adj('a'));
+    await syncNow(1, { fetch: serverWithHealth(status500).fetch });
+    expect(await getLastSentAt()).toBeNull();
+    await syncNow(1, { fetch: serverWithHealth(() => new Response('{}', { status: 400 })).fetch });
+    expect(await getLastSentAt()).toBeNull();
+    await enqueue(1, adj('b'));
+    const before = Date.now();
+    await syncNow(1, { fetch: serverWithHealth(allApplied).fetch });
+    expect(await getLastSentAt()).toBeGreaterThan(before);
+  });
+
+  it('tout POST en 500 et /healthz en 200, gestes A, B, C → seul A passe en quarantaine, B reste en file à 5 coups ou plus', async () => {
+    steppingClock();
+    for (const id of ['A', 'B', 'C']) await enqueue(1, adj(id));
+    const s = serverWithHealth(status500, true);
+    const strikesOf = async (id: string) => (await listQueued(1)).find((q) => q.op.opId === id)?.strikes ?? 0;
+    await syncUntil(s.fetch, async () => (await strikesOf('B')) >= MAX_STRIKES + 2, 40);
+
+    const q = await listQueued(1);
+    expect(q.map((x) => x.op.opId)).toEqual(['A', 'B', 'C']);
+    expect(q[0].quarantinedAt).toEqual(expect.any(Number));
+    expect(q[1].strikes).toBeGreaterThanOrEqual(MAX_STRIKES);
+    expect(q[1].quarantinedAt).toBeUndefined();
+    expect(q[2].quarantinedAt).toBeUndefined();
+    const out = await syncNow(1, { fetch: s.fetch });
+    expect(out).toMatchObject({ status: 'retry', quarantined: [], sent: 0 });
+    expect(ids(s.batches).at(-1)).toEqual(['B']); // B stays at the head and blocks C
+  });
+
+  it('un envoi réussi depuis la dernière quarantaine → un nouveau geste fautif peut passer en quarantaine', async () => {
+    steppingClock();
+    for (const id of ['A', 'B', 'C']) await enqueue(1, adj(id));
+    const down = serverWithHealth(status500, true);
+    const strikesOf = async (id: string) => (await listQueued(1)).find((q) => q.op.opId === id)?.strikes ?? 0;
+    await syncUntil(down.fetch, async () => (await strikesOf('B')) >= MAX_STRIKES, 40);
+    expect((await listQueued(1)).filter((q) => q.quarantinedAt !== undefined).map((q) => q.op.opId)).toEqual(['A']);
+
+    // The server writes again: B and C go through, A stays quarantined (the user decides).
+    const up = serverWithHealth(allApplied);
+    const out = await syncNow(1, { fetch: up.fetch });
+    expect(out).toMatchObject({ status: 'ok', sent: 2 });
+    expect((await listQueued(1)).map((q) => q.op.opId)).toEqual(['A']);
+
+    // A new faulty gesture D can now be quarantined.
+    await enqueue(1, adj('D'));
+    const s = serverWithHealth(failsOn('D'));
+    await syncUntil(s.fetch, async () => (await listQueued(1)).some((q) => q.op.opId === 'D' && q.quarantinedAt !== undefined), MAX_STRIKES + 1);
+    const q = await listQueued(1);
+    expect(q.map((x) => [x.op.opId, x.quarantinedAt !== undefined])).toEqual([
+      ['A', true],
+      ['D', true]
+    ]);
   });
 });

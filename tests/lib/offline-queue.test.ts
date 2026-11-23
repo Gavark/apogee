@@ -7,11 +7,13 @@ import {
   countQueued,
   enqueue,
   getActiveUser,
+  getLastSentAt,
   listQueued,
   quarantine,
   releaseQuarantine,
   removeQueued,
   setActiveUser,
+  setLastSentAt,
   splitQuarantine,
   strike,
   _resetForTests
@@ -122,6 +124,18 @@ describe('utilisateur actif (pour le service worker)', () => {
     await enqueue(1, adj('b'));
     await setActiveUser(null);
     expect((await listQueued(1)).map((q) => q.op.opId)).toEqual(['b']);
+  });
+
+  it('lastSentAt : null tant que rien n’est enregistré, puis la dernière date, indépendante de l’utilisateur actif', async () => {
+    expect(await getLastSentAt()).toBeNull();
+    await setActiveUser(2);
+    await setLastSentAt(1000);
+    expect(await getLastSentAt()).toBe(1000);
+    await setLastSentAt(2000);
+    expect(await getLastSentAt()).toBe(2000);
+    await clearQueue();
+    await setActiveUser(null);
+    expect(await getLastSentAt()).toBe(2000);
   });
 
   it('la mise à niveau depuis la version 1 de la base garde les gestes en file', async () => {

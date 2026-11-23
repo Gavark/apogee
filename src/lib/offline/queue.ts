@@ -23,9 +23,13 @@ const DB_NAME = 'apogee-offline';
 /** 2: adds the `meta` store (the active user). */
 const DB_VERSION = 2;
 const STORE = 'ops';
-/** Small key/value store: `activeUser` tells the service worker whose queue to send. */
+/**
+ * Small key/value store: `activeUser` tells the service worker whose queue to send; `lastSentAt`
+ * is when a batch was last accepted by the server (the quarantine circuit breaker, see sync.ts).
+ */
 const META = 'meta';
 const ACTIVE_USER = 'activeUser';
+const LAST_SENT_AT = 'lastSentAt';
 
 type Stored = QueuedOp & { seq: number };
 
@@ -251,6 +255,23 @@ export function getActiveUser(): Promise<number | null> {
     async (store) => {
       const v: unknown = await wrap(store.get(ACTIVE_USER));
       return typeof v === 'number' && Number.isInteger(v) ? v : null;
+    },
+    META
+  );
+}
+
+/** Records when the server last accepted a batch (any context: tabs and service worker share it). */
+export function setLastSentAt(at: number): Promise<void> {
+  return tx('readwrite', async (store) => void (await wrap(store.put(at, LAST_SENT_AT))), META);
+}
+
+/** When the server last accepted a batch, or null when none ever was (in this browser). */
+export function getLastSentAt(): Promise<number | null> {
+  return tx(
+    'readonly',
+    async (store) => {
+      const v: unknown = await wrap(store.get(LAST_SENT_AT));
+      return typeof v === 'number' && Number.isFinite(v) ? v : null;
     },
     META
   );
