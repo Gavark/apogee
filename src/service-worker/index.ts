@@ -169,6 +169,7 @@ async function backgroundSync(): Promise<void> {
   // far too late when the network comes back flaky. syncNow takes the same 'apogee-sync' lock as the tabs.
   const outcome = await runWithRetries(() => syncNow(userId), async (o) => {
     // Open tabs record the results (for "Annuler") and reload their data, after every attempt.
+    // runWithRetries swallows a failure here: it never stops the attempts.
     if (o.status === 'busy' || o.status === 'idle') return;
     const windows = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
     for (const w of windows) w.postMessage({ type: 'sync-outcome', userId, outcome: o });
