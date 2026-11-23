@@ -297,15 +297,16 @@ describe('annulation différée (geste marqué undo dans la file)', () => {
 });
 
 /**
- * Like `server`, plus GET /healthz: answers 200 while `health.up`, else rejects (server unreachable).
- * `health.probes` counts the /healthz calls.
+ * Like `server`, plus GET /healthz: `health.up` true answers 200, a number answers with that status,
+ * false rejects (server unreachable). `health.probes` counts the /healthz calls.
  */
-function serverWithHealth(answer: (ops: StockOp[]) => Response | Promise<Response>, up = true) {
+function serverWithHealth(answer: (ops: StockOp[]) => Response | Promise<Response>, up: boolean | number = true) {
   const batches: Sent[] = [];
   const health = { up, probes: 0 };
   const fetch = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
     if (String(url) === '/healthz') {
       health.probes++;
+      if (typeof health.up === 'number') return new Response('', { status: health.up });
       if (health.up) return new Response('ok');
       throw new TypeError('Failed to fetch');
     }
@@ -323,9 +324,13 @@ const review = (opId: string, consumeOpId: string): StockOp => ({ opId, kind: 'r
 const failsOn = (culprit: string) => (ops: StockOp[]) => (ops.some((o) => o.opId === culprit) ? status500() : allApplied(ops));
 
 describe('postOps et serverReachable', () => {
-  it('échec : answered vrai si une réponse HTTP est arrivée, faux pour une exception', async () => {
+  it('échec : answered vrai si une réponse HTTP est arrivée, faux pour une exception ou un 502/503/504', async () => {
     const answered = serverWithHealth(() => status500());
     await expect(postOps([adj('a')], 1, answered.fetch)).resolves.toEqual({ kind: 'failed', answered: true });
+    for (const status of [502, 503, 504]) {
+      const gateway = serverWithHealth(() => new Response('', { status }));
+      await expect(postOps([adj('a')], 1, gateway.fetch)).resolves.toEqual({ kind: 'failed', answered: false });
+    }
     const unreadable = serverWithHealth(() => new Response('pas du json'));
     await expect(postOps([adj('a')], 1, unreadable.fetch)).resolves.toEqual({ kind: 'failed', answered: true });
     const thrown = serverWithHealth(() => {
@@ -334,10 +339,12 @@ describe('postOps et serverReachable', () => {
     await expect(postOps([adj('a')], 1, thrown.fetch)).resolves.toEqual({ kind: 'failed', answered: false });
   });
 
-  it('serverReachable : GET /healthz sans cache ; vrai s’il répond (quel que soit le statut), faux sinon', async () => {
-    const up = vi.fn(async () => new Response('', { status: 503 }));
+  it('serverReachable : GET /healthz sans cache ; vrai seulement sur une réponse 2xx', async () => {
+    const up = vi.fn(async () => new Response('ok', { status: 200 }));
     await expect(serverReachable(up as unknown as typeof fetch)).resolves.toBe(true);
     expect(up).toHaveBeenCalledWith('/healthz', expect.objectContaining({ cache: 'no-store', credentials: 'same-origin' }));
+    const dbDown = vi.fn(async () => new Response('', { status: 503 }));
+    await expect(serverReachable(dbDown as unknown as typeof fetch)).resolves.toBe(false);
     const down = vi.fn(async () => {
       throw new TypeError('Failed to fetch');
     });
@@ -387,6 +394,28 @@ describe('quarantaine des gestes en échec répété', () => {
     const q = await listQueued(1);
     expect(q[0].attempts).toBe(1);
     expect(q[0].strikes).toBeUndefined();
+  });
+
+  it('502, 503 puis 504 avec /healthz en 503 → aucun coup, attempts +1, retry', async () => {
+    await enqueue(1, adj('a'));
+    for (const [i, status] of [502, 503, 504].entries()) {
+      const s = serverWithHealth(() => new Response('', { status }), 503);
+      const out = await syncNow(1, { fetch: s.fetch });
+      expect(out).toMatchObject({ status: 'retry', quarantined: [] });
+      expect(s.health.probes).toBe(1);
+      const q = await listQueued(1);
+      expect(q[0].attempts).toBe(i + 1);
+      expect(q[0].strikes).toBeUndefined();
+    }
+  });
+
+  it('502 avec /healthz en 200 → coup', async () => {
+    await enqueue(1, adj('a'));
+    const s = serverWithHealth(() => new Response('', { status: 502 }), 200);
+    const out = await syncNow(1, { fetch: s.fetch });
+    expect(out.status).toBe('retry');
+    expect(s.health.probes).toBe(1);
+    expect((await listQueued(1))[0]).toMatchObject({ attempts: 1, strikes: 1 });
   });
 
   it('navigator.onLine false → ni envoi ni coup', async () => {

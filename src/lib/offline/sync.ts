@@ -89,9 +89,13 @@ export type PostOutcome =
   | { kind: 'ok'; results: OpResult[] }
   | { kind: 'invalid' } // 400: the server will never accept these ops
   | { kind: 'unauthorized' } // 401, or 409: the session belongs to another account than the ops
-  // 5xx, network failure, timeout or unreadable body: maybe applied, replay later. `answered`: an
-  // HTTP response arrived (unhandled status, or unreadable body), so the server itself is reachable.
+  // 5xx, network failure, timeout or unreadable body: maybe applied, replay later. `answered`: the
+  // app itself answered (unhandled status, or unreadable body). False for an exception and for
+  // 502/503/504, which the reverse proxy sends while the app is down: those go through the probe.
   | { kind: 'failed'; answered: boolean };
+
+/** Statuses a gateway (the reverse proxy) answers in the app's place: they say nothing about the app. */
+const GATEWAY_STATUSES = new Set([502, 503, 504]);
 
 /** Header naming the account the ops belong to; the server answers 409 when the session is another one. */
 export const USER_HEADER = 'x-apogee-user';
@@ -117,7 +121,7 @@ export async function postOps(ops: StockOp[], userId: number, doFetch: typeof fe
       credentials: 'same-origin',
       signal: timeoutSignal()
     });
-    answered = true;
+    answered = !GATEWAY_STATUSES.has(res.status);
     if (res.status === 401 || res.status === 409) return { kind: 'unauthorized' };
     if (res.status === 400) return { kind: 'invalid' };
     if (res.ok) {
@@ -131,13 +135,18 @@ export async function postOps(ops: StockOp[], userId: number, doFetch: typeof fe
 }
 
 /**
- * Whether the server answers /healthz at all (any status). Standalone copy of probeServer
- * (online.svelte.ts is a runes module the service worker cannot import).
+ * Whether the app answers /healthz with a 2xx: a proxy's 502/503/504, or the app's own 503 (database
+ * down), means it cannot be blamed for a failure. Same request as probeServer (online.svelte.ts is a
+ * runes module the service worker cannot import), which counts any answer as online.
  */
 export async function serverReachable(doFetch: typeof fetch = fetch): Promise<boolean> {
   try {
-    await doFetch('/healthz', { cache: 'no-store', credentials: 'same-origin', signal: timeoutSignal(PROBE_TIMEOUT_MS) });
-    return true;
+    const res = await doFetch('/healthz', {
+      cache: 'no-store',
+      credentials: 'same-origin',
+      signal: timeoutSignal(PROBE_TIMEOUT_MS)
+    });
+    return res.ok;
   } catch {
     return false;
   }
@@ -233,8 +242,8 @@ async function sendQueued(queued: QueuedOp[], userId: number, doFetch: typeof fe
  *
  * Quarantine: quarantined gestures, and the reviews whose consume is one of them, are never sent
  * (nothing else to send → `idle`). A gesture with a strike goes alone; the others go in batches of
- * consecutive unstruck rows. A failed batch whose failure is imputable to the server (an HTTP
- * answer, or /healthz answering after a network error or timeout) strikes its head gesture. At
+ * consecutive unstruck rows. A failed batch whose failure is imputable to the app (its own HTTP
+ * answer; after a network error, a timeout or a 502/503/504, a 2xx from /healthz) strikes its head gesture. At
  * MAX_STRIKES the head is quarantined (listed in `quarantined`) and the queue is listed again, so
  * what follows is still sent in this sync (within MAX_PASSES); otherwise the sync stops on `retry`.
  * 400 and rejected ops never strike.
