@@ -156,6 +156,7 @@ export const consumptions = sqliteTable('consumptions', {
   consumedOn: text('consumed_on').notNull(),
   rating: integer('rating'),
   note: text('note'),
+  verdict: text('verdict', { enum: ['early', 'right', 'late'] }),
   createdAt: integer('created_at').notNull().default(sql`(unixepoch())`)
 });
 

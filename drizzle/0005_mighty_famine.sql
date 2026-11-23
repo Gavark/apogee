@@ -1,0 +1,1 @@
+ALTER TABLE `consumptions` ADD `verdict` text;

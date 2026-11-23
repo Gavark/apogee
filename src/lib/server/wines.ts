@@ -7,6 +7,7 @@ import { getOwnedAnalysis } from './label-analyses';
 import { cleanupQuietly, deletePhoto, photosDir } from './photos';
 import type { AiConfidence } from './ai/types';
 import { WINE_FORMATS_CL, type Color } from '../wine-constants';
+import type { Verdict } from '../stock-ops';
 import { householdReferenceTimeZone, markCurrentPhaseSilently } from './notifications/phases';
 import {
   HOME_SECTION_ORDER,
@@ -489,6 +490,7 @@ export type WineDetail = CellarRow & {
     consumedOn: string;
     rating: number | null;
     note: string | null;
+    verdict: Verdict | null;
     userEmail: string | null;
     locationName: string | null;
   }[];
@@ -503,6 +505,7 @@ export function getWineDetail(db: DB, ctx: HouseholdCtx, wineId: number, year: n
       consumedOn: consumptions.consumedOn,
       rating: consumptions.rating,
       note: consumptions.note,
+      verdict: consumptions.verdict,
       userEmail: users.email,
       locationName: locations.name
     })
