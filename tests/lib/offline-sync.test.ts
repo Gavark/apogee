@@ -593,7 +593,8 @@ describe('disjoncteur contre la mise en quarantaine en série', () => {
     expect(q[2].quarantinedAt).toBeUndefined();
     const out = await syncNow(1, { fetch: s.fetch });
     expect(out).toMatchObject({ status: 'retry', quarantined: [], sent: 0 });
-    expect(ids(s.batches).at(-1)).toEqual(['B']); // B stays at the head and blocks C
+    // B stays at the head; C goes alone as the canary and fails too: nothing is quarantined.
+    expect(ids(s.batches).slice(-2)).toEqual([['B'], ['C']]);
   });
 
   it('un envoi réussi depuis la dernière quarantaine → un nouveau geste fautif peut passer en quarantaine', async () => {
@@ -619,5 +620,123 @@ describe('disjoncteur contre la mise en quarantaine en série', () => {
       ['A', true],
       ['D', true]
     ]);
+  });
+});
+
+describe('canari quand le disjoncteur est ouvert', () => {
+  function steppingClock() {
+    let t = 2_000_000;
+    vi.spyOn(Date, 'now').mockImplementation(() => (t += 10));
+  }
+  /** Answers 500 to any batch holding one of `culprits`, applies the others. */
+  const failsOnAny =
+    (...culprits: string[]) =>
+    (ops: StockOp[]) =>
+      ops.some((o) => culprits.includes(o.opId)) ? status500() : allApplied(ops);
+  /** Queues Y quarantined (nothing sent since), then X one strike short of quarantine. */
+  async function yQuarantinedThenX(x: StockOp = adj('X')) {
+    await enqueue(1, adj('Y'));
+    for (let i = 0; i < MAX_STRIKES; i++) await strike('Y');
+    await quarantine('Y');
+    await enqueue(1, x);
+    for (let i = 1; i < MAX_STRIKES; i++) await strike(x.opId);
+  }
+
+  it('[Y, X, Z], Y et X en 500, /healthz 200 : Z part seul comme canari, puis X passe en quarantaine', async () => {
+    steppingClock();
+    for (const id of ['Y', 'X', 'Z']) await enqueue(1, adj(id));
+    const s = serverWithHealth(failsOnAny('Y', 'X'), true);
+    const quarantinedIds = async () => (await listQueued(1)).filter((q) => q.quarantinedAt !== undefined).map((q) => q.op.opId);
+    let last;
+    for (let i = 0; i < 20 && (await quarantinedIds()).length < 2; i++) last = await syncNow(1, { fetch: s.fetch });
+    expect(last).toMatchObject({ status: 'ok', sent: 1, quarantined: ['X'] });
+    expect(last!.results.map((r) => r.opId)).toEqual(['Z']);
+    expect(ids(s.batches).slice(-2)).toEqual([['X'], ['Z']]);
+    expect(await getLastSentAt()).toEqual(expect.any(Number));
+    expect((await listQueued(1)).map((q) => [q.op.opId, q.quarantinedAt !== undefined])).toEqual([
+      ['Y', true],
+      ['X', true]
+    ]);
+
+    const later = serverWithHealth(allApplied);
+    const out = await syncNow(1, { fetch: later.fetch });
+    expect(out.status).toBe('idle');
+    expect(later.calls).not.toHaveBeenCalled();
+  });
+
+  it('panne générale (tout POST en 500, /healthz 200), Y déjà en quarantaine : aucune nouvelle quarantaine, canari attempts +1 sans coup', async () => {
+    await yQuarantinedThenX();
+    await enqueue(1, adj('Z'));
+    const s = serverWithHealth(status500, true);
+    const out = await syncNow(1, { fetch: s.fetch });
+    expect(out).toMatchObject({ status: 'retry', sent: 0, quarantined: [] });
+    expect(ids(s.batches)).toEqual([['X'], ['Z']]);
+    const q = await listQueued(1);
+    expect(q.map((x) => [x.op.opId, x.attempts, x.strikes, x.quarantinedAt !== undefined])).toEqual([
+      ['Y', 0, MAX_STRIKES, true],
+      ['X', 1, MAX_STRIKES, false],
+      ['Z', 1, undefined, false]
+    ]);
+    expect(await getLastSentAt()).toBeNull();
+  });
+
+  it('un review qui vise X n’est jamais choisi comme canari', async () => {
+    await yQuarantinedThenX(consume('X'));
+    await enqueue(1, review('R', 'X'));
+    await enqueue(1, adj('Z'));
+    const s = serverWithHealth(failsOnAny('X'), true);
+    const out = await syncNow(1, { fetch: s.fetch });
+    expect(ids(s.batches)).toEqual([['X'], ['Z']]);
+    expect(out).toMatchObject({ status: 'ok', quarantined: ['X'] });
+    expect((await listQueued(1)).map((q) => q.op.opId)).toEqual(['Y', 'X', 'R']);
+  });
+
+  it('aucun canari possible (seul le review de X suit) → retry, rien en quarantaine', async () => {
+    await yQuarantinedThenX(consume('X'));
+    await enqueue(1, review('R', 'X'));
+    const s = serverWithHealth(failsOnAny('X'), true);
+    const out = await syncNow(1, { fetch: s.fetch });
+    expect(ids(s.batches)).toEqual([['X']]);
+    expect(out).toMatchObject({ status: 'retry', quarantined: [] });
+    expect((await listQueued(1)).find((q) => q.op.opId === 'R')?.attempts).toBe(0);
+  });
+
+  it('canari refusé en 400 → retiré (dropped), retry, X sans quarantaine', async () => {
+    await yQuarantinedThenX();
+    await enqueue(1, adj('Z'));
+    const s = serverWithHealth((ops) => (ops[0].opId === 'Z' ? new Response('{}', { status: 400 }) : status500()), true);
+    const out = await syncNow(1, { fetch: s.fetch });
+    expect(ids(s.batches)).toEqual([['X'], ['Z']]);
+    expect(out).toMatchObject({ status: 'retry', quarantined: [] });
+    expect(out.dropped.map((o) => o.opId)).toEqual(['Z']);
+    expect((await listQueued(1)).map((q) => [q.op.opId, q.quarantinedAt !== undefined])).toEqual([
+      ['Y', true],
+      ['X', false]
+    ]);
+  });
+
+  it('canari en 401 → unauthorized, rien retiré ni compté', async () => {
+    await yQuarantinedThenX();
+    await enqueue(1, adj('Z'));
+    const s = serverWithHealth((ops) => (ops[0].opId === 'Z' ? new Response('', { status: 401 }) : status500()), true);
+    const out = await syncNow(1, { fetch: s.fetch });
+    expect(out).toMatchObject({ status: 'unauthorized', quarantined: [] });
+    expect((await listQueued(1)).find((q) => q.op.opId === 'Z')).toMatchObject({ attempts: 0 });
+  });
+
+  it('canari marqué undo et accepté → son inverse est mis en file, comme pour un lot ordinaire', async () => {
+    await yQuarantinedThenX();
+    await enqueue(1, consume('Z'));
+    await markUndo('Z');
+    const s = serverWithHealth((ops) =>
+      ops.some((o) => o.opId === 'X')
+        ? status500()
+        : ok(ops.map((o) => ({ opId: o.opId, status: 'applied' as const, ...(o.kind === 'consume' ? { consumptionId: 42 } : {}) })))
+    );
+    const out = await syncNow(1, { fetch: s.fetch });
+    expect(out.quarantined).toEqual(['X']);
+    expect(out.undone).toContain('Z');
+    expect(ids(s.batches).slice(0, 2)).toEqual([['X'], ['Z']]);
+    expect(s.batches.flat().some((o) => o.kind === 'unconsume')).toBe(true); // the inverse went in the next pass
   });
 });

@@ -201,6 +201,63 @@ function nextBatch(rows: QueuedOp[], start: number): QueuedOp[] {
   return rows.slice(start, end);
 }
 
+/** opIds of `rows` sent for an undo (undone gestures and their inverses). */
+const undoIds = (rows: QueuedOp[]) => rows.filter((q) => q.undo || q.inverseOf !== undefined).map((q) => q.op.opId);
+
+/**
+ * Records a batch the server accepted (2xx): removes its rows, queuing in the same transaction the
+ * inverse of each undone gesture whose result is now known, and closes the circuit breaker.
+ * Resolves the number of inverses queued.
+ */
+async function accept(rows: QueuedOp[], results: OpResult[], userId: number, out: SyncOutcome): Promise<number> {
+  const byId = new Map(results.map((r) => [r.opId, r]));
+  const inverses: QueuedInverse[] = [];
+  for (const q of rows) {
+    const inv = q.undo ? inverseOf(q.op, byId.get(q.op.opId)) : null;
+    if (inv) inverses.push({ userId, op: inv, inverseOf: q.op.opId });
+  }
+  await removeQueued(rows.map((q) => q.op.opId), inverses);
+  await setLastSentAt(Date.now()); // closes the quarantine circuit breaker
+  out.sent += rows.length;
+  out.results.push(...results);
+  out.undone.push(...undoIds(rows));
+  return inverses.length;
+}
+
+/** The first row from `rows[from]` on that can test the server in place of `headId`: not a review of it. */
+function canaryFor(rows: QueuedOp[], from: number, headId: string): QueuedOp | undefined {
+  return rows.slice(from).find((q) => !(q.op.kind === 'review' && q.op.consumeOpId === headId));
+}
+
+/**
+ * The head `headId` reached MAX_STRIKES with the breaker open: sends `canary` alone to tell a
+ * general outage from a second faulty gesture. Accepted, it closes the breaker and the head is
+ * quarantined (resolves true: list again). Otherwise the sync stops and nobody is struck: a failed
+ * canary counts an attempt (it may have been applied), a 400 drops it, a 401/409 is `unauthorized`.
+ */
+async function sendCanary(canary: QueuedOp, headId: string, userId: number, doFetch: typeof fetch, out: SyncOutcome): Promise<boolean> {
+  const res = await postOps([canary.op], userId, doFetch);
+  if (res.kind === 'ok') {
+    await accept([canary], res.results, userId, out);
+    await quarantine(headId);
+    out.quarantined.push(headId);
+    return true;
+  }
+  if (res.kind === 'unauthorized') {
+    out.status = 'unauthorized';
+    return false;
+  }
+  if (res.kind === 'invalid') {
+    await removeQueued([canary.op.opId]);
+    out.dropped.push(canary.op);
+    out.undone.push(...undoIds([canary]));
+  } else {
+    await bumpAttempts([canary.op.opId]);
+  }
+  out.status = 'retry';
+  return false;
+}
+
 /**
  * One pass over `queued` (sendable rows only), in batches, filling `out`. Resolves true when
  * another pass is needed: it queued inverses, or quarantined a gesture (and stopped there).
@@ -212,7 +269,6 @@ async function sendQueued(queued: QueuedOp[], userId: number, doFetch: typeof fe
     i += rows.length;
     const ops = rows.map((q) => q.op);
     const ids = ops.map((o) => o.opId);
-    const forUndo = rows.filter((q) => q.undo || q.inverseOf !== undefined).map((q) => q.op.opId);
     const res = await postOps(ops, userId, doFetch);
     if (res.kind === 'unauthorized') {
       out.status = 'unauthorized'; // nothing removed, no attempt counted: sent again once logged back in as this user
@@ -222,7 +278,7 @@ async function sendQueued(queued: QueuedOp[], userId: number, doFetch: typeof fe
       // Never accepted, so never applied: keep it from blocking the queue. Nothing to undo either.
       await removeQueued(ids);
       out.dropped.push(...ops);
-      out.undone.push(...forUndo);
+      out.undone.push(...undoIds(rows));
       continue;
     }
     if (res.kind === 'failed') {
@@ -230,29 +286,22 @@ async function sendQueued(queued: QueuedOp[], userId: number, doFetch: typeof fe
       // Blame the head of the batch only when the server is reachable (not a network outage).
       if (res.answered || (await serverReachable(doFetch))) {
         const head = ids[0];
-        // Breaker open: the head keeps its strikes and blocks the queue, as for an ordinary failure.
-        if ((await strike(head)) >= MAX_STRIKES && !(await breakerOpen(userId, head))) {
-          await quarantine(head);
-          out.quarantined.push(head);
-          return true; // list again: the reviews it holds back and the gestures after it are recomputed
+        if ((await strike(head)) >= MAX_STRIKES) {
+          if (!(await breakerOpen(userId, head))) {
+            await quarantine(head);
+            out.quarantined.push(head);
+            return true; // list again: the reviews it holds back and the gestures after it are recomputed
+          }
+          // Breaker open: a canary tells a general outage from a second faulty gesture, which would
+          // otherwise block the queue for good. No canary: nothing waits behind the head.
+          const canary = canaryFor(queued, i, head);
+          if (canary) return sendCanary(canary, head, userId, doFetch, out);
         }
       }
       out.status = 'retry';
       break;
     }
-    // An undone gesture's result is known: its inverse is queued in the same transaction as its removal.
-    const byId = new Map(res.results.map((r) => [r.opId, r]));
-    const inverses: QueuedInverse[] = [];
-    for (const q of rows) {
-      const inv = q.undo ? inverseOf(q.op, byId.get(q.op.opId)) : null;
-      if (inv) inverses.push({ userId, op: inv, inverseOf: q.op.opId });
-    }
-    await removeQueued(ids, inverses);
-    await setLastSentAt(Date.now()); // closes the quarantine circuit breaker
-    inversesQueued += inverses.length;
-    out.sent += ops.length;
-    out.results.push(...res.results);
-    out.undone.push(...forUndo);
+    inversesQueued += await accept(rows, res.results, userId, out);
   }
   return inversesQueued > 0;
 }
@@ -269,7 +318,9 @@ async function sendQueued(queued: QueuedOp[], userId: number, doFetch: typeof fe
  * MAX_STRIKES the head is quarantined (listed in `quarantined`) and the queue is listed again, so
  * what follows is still sent in this sync (within MAX_PASSES); otherwise the sync stops on `retry`.
  * Circuit breaker: no new quarantine while another gesture is quarantined and no batch was accepted
- * since (see breakerOpen): the head keeps its strikes and the sync stops on `retry`.
+ * since (see breakerOpen). The head keeps its strikes and one canary, the next sendable row that is
+ * not a review of it, goes alone: accepted, the head is quarantined and the sync goes on; otherwise
+ * (general outage) the sync stops on `retry` with no strike on either. No canary: `retry` too.
  * 400 and rejected ops never strike.
  */
 export async function syncNow(userId: number, deps: { fetch?: typeof fetch } = {}): Promise<SyncOutcome> {
