@@ -10,6 +10,8 @@
   import { applyPending } from '$lib/offline/overlay';
   import { pendingOps } from '$lib/offline/pending.svelte';
   import type { CellarRow } from '$lib/server/wines';
+  import type { Phase } from '$lib/phase';
+  import { activePhase, visibleSections } from '$lib/home-filter';
 
   let { data } = $props();
 
@@ -21,6 +23,13 @@
   });
   const total = $derived(sections.reduce((n, s) => n + s.rows.reduce((k, r) => k + r.bottles, 0), 0));
 
+  // Phase filter: client-side only, applied on the sections above (pending gestures included).
+  let selected = $state<Phase | null>(null);
+  const active = $derived(activePhase(sections, selected));
+  const shown = $derived(visibleSections(sections, active));
+  const shownBottles = $derived(shown.reduce((n, s) => n + s.rows.reduce((k, r) => k + r.bottles, 0), 0));
+  const toggle = (phase: Phase) => (selected = active === phase ? null : phase);
+
   // The wine being estimated (a snapshot of its row: the sheet only needs its id and current window).
   let estimating = $state<CellarRow | null>(null);
   const estimate = $derived(data.aiEnabled ? (row: CellarRow) => (estimating = row) : undefined);
@@ -30,7 +39,9 @@
 
 <header class="head">
   <h1>{m.home_title()}</h1>
-  <p class="muted">{m.home_total({ count: total })}</p>
+  <p class="muted">
+    {active === null ? m.home_total({ count: total }) : m.home_total_filtered({ count: shownBottles, total })}
+  </p>
 </header>
 
 {#if sections.length === 0}
@@ -38,9 +49,22 @@
     <Button href="/app/add">{m.home_empty_action()}</Button>
   </EmptyState>
 {:else}
+  {#if sections.length > 1}
+    <div class="chips" role="group" aria-label={m.home_filter_label()}>
+      <button type="button" class="chip" class:on={active === null} aria-pressed={active === null} onclick={() => (selected = null)}>
+        {m.home_filter_all()}
+      </button>
+      {#each sections as section (section.phase)}
+        <button type="button" class="chip" class:on={active === section.phase} aria-pressed={active === section.phase} onclick={() => toggle(section.phase)}>
+          <PhaseBadge phase={section.phase} />
+          <span class="count">{section.rows.length}</span>
+        </button>
+      {/each}
+    </div>
+  {/if}
   <div class="sections">
-    {#each sections as section (section.phase)}
-      {#if section.phase === 'too_young'}
+    {#each shown as section (section.phase)}
+      {#if section.phase === 'too_young' && active === null}
         <!-- Not urgent: collapsed by default, the rows show their opening year. -->
         <details class="section">
           <summary>
@@ -86,6 +110,29 @@
   .head { margin-bottom: var(--s-4); }
   h1 { margin: 0; }
   .muted { margin: 0; color: var(--c-text-muted); }
+  .chips {
+    display: flex;
+    gap: var(--s-2);
+    margin-bottom: var(--s-4);
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .chips::-webkit-scrollbar { display: none; }
+  .chip {
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    gap: var(--s-2);
+    min-height: var(--tap);
+    padding: 0 var(--s-3);
+    border: 1px solid var(--c-border);
+    border-radius: var(--r-card);
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    cursor: pointer;
+  }
+  .chip.on { border-color: var(--c-accent); box-shadow: inset 0 0 0 1px var(--c-accent); }
   .sections { display: grid; gap: var(--s-5); }
   .section-head, summary {
     display: flex;
