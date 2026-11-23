@@ -466,6 +466,35 @@
   "offline_saved": "Saved, will sync",
   "offline_undo_deferred": "The undo will be applied when syncing",
   "offline_op_failed": "An operation could not be applied",
+  "offline_op_quarantined": "A change could not be sent",
+  "quarantine_still_failing": "Still unable to send",
+  "quarantine_abandoned": "Change discarded",
+  "quarantine_title": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} change could not be sent",
+        "countPlural=*": "{count} changes could not be sent"
+      }
+    }
+  ],
+  "quarantine_kind_consume": "Bottle drunk",
+  "quarantine_kind_adjust": "Stock adjusted",
+  "quarantine_kind_move": "Bottle moved",
+  "quarantine_kind_unconsume": "Bottle put back",
+  "quarantine_kind_review": "Verdict",
+  "quarantine_with_review": "+ verdict",
+  "quarantine_retry": "Retry",
+  "quarantine_abandon": "Discard",
+  "quarantine_keep": "Keep",
+  "quarantine_abandon_title": "Discard this change?",
+  "quarantine_abandon_body": "This change will never be sent. If it was already recorded, correct the stock by hand.",
   "offline_pending": [
     {
       "declarations": [

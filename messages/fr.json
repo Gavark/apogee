@@ -466,6 +466,35 @@
   "offline_saved": "Enregistré, sera synchronisé",
   "offline_undo_deferred": "L'annulation sera appliquée à la synchronisation",
   "offline_op_failed": "Une opération n'a pas pu être appliquée",
+  "offline_op_quarantined": "Un geste n'a pas pu être envoyé",
+  "quarantine_still_failing": "Toujours impossible à envoyer",
+  "quarantine_abandoned": "Geste abandonné",
+  "quarantine_title": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} geste n'a pas pu être envoyé",
+        "countPlural=*": "{count} gestes n'ont pas pu être envoyés"
+      }
+    }
+  ],
+  "quarantine_kind_consume": "Bouteille bue",
+  "quarantine_kind_adjust": "Stock ajusté",
+  "quarantine_kind_move": "Bouteille déplacée",
+  "quarantine_kind_unconsume": "Bouteille remise en cave",
+  "quarantine_kind_review": "Verdict",
+  "quarantine_with_review": "+ verdict",
+  "quarantine_retry": "Réessayer",
+  "quarantine_abandon": "Abandonner",
+  "quarantine_keep": "Garder",
+  "quarantine_abandon_title": "Abandonner ce geste ?",
+  "quarantine_abandon_body": "Ce geste ne sera jamais envoyé. S'il a déjà été pris en compte, corrigez le stock à la main.",
   "offline_pending": [
     {
       "declarations": [

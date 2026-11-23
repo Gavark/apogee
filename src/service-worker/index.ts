@@ -22,6 +22,7 @@ import {
 } from '../lib/offline/page-cache';
 import { getActiveUser } from '../lib/offline/queue';
 import { syncNow } from '../lib/offline/sync';
+import { runWithRetries, shouldRetry } from '../lib/offline/background-sync';
 
 declare const self: ServiceWorkerGlobalScope;
 
@@ -180,16 +181,18 @@ self.addEventListener('sync', (e) => {
 async function backgroundSync(): Promise<void> {
   const userId = await getActiveUser(); // whoever is logged in: never another user's queue
   if (userId === null) return;
-  const outcome = await syncNow(userId); // takes the same 'apogee-sync' lock as the tabs
-  // Open tabs record the results (for "Annuler") and reload their data.
-  if (outcome.status !== 'busy' && outcome.status !== 'idle') {
+  // Retry inside the event: a rejected `sync` is only rescheduled by Chrome several minutes later,
+  // far too late when the network comes back flaky. syncNow takes the same 'apogee-sync' lock as the tabs.
+  const outcome = await runWithRetries(() => syncNow(userId), async (o) => {
+    // Open tabs record the results (for "Annuler") and reload their data, after every attempt.
+    // runWithRetries swallows a failure here: it never stops the attempts.
+    if (o.status === 'busy' || o.status === 'idle') return;
     const windows = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
-    for (const w of windows) w.postMessage({ type: 'sync-outcome', userId, outcome });
-  }
-  // Rejecting asks the browser to try again later. `busy`: a tab is sending, it may not finish.
-  if (outcome.status === 'retry' || outcome.status === 'offline' || outcome.status === 'busy') {
-    throw new Error(`background sync: ${outcome.status}`);
-  }
+    for (const w of windows) w.postMessage({ type: 'sync-outcome', userId, outcome: o });
+  });
+  // Still failing after the last attempt: reject so the browser schedules another `sync`.
+  // `busy`: a tab is sending, it may not finish.
+  if (shouldRetry(outcome.status)) throw new Error(`background sync: ${outcome.status}`);
 }
 
 // Always show the notification: the server already limits it to one a day.

@@ -4,7 +4,8 @@
   import CloudArrowUp from 'phosphor-svelte/lib/CloudArrowUp';
   import * as m from '$paraglide/messages';
   import BottomNav from '$lib/components/BottomNav.svelte';
-  import { pendingCount, startSyncLoop } from '$lib/offline/pending.svelte';
+  import QuarantinePanel from '$lib/components/QuarantinePanel.svelte';
+  import { pendingCount, quarantinedItems, startSyncLoop } from '$lib/offline/pending.svelte';
   import { reloadAfterColdStart } from '$lib/offline/page-cache';
   import { becomeActiveUser } from '$lib/offline/session';
 
@@ -32,6 +33,10 @@
   <p class="pending" role="status">
     <CloudArrowUp size={16} aria-hidden="true" />{m.offline_pending({ count: waiting })}
   </p>
+{/if}
+
+{#if typeof userId === 'number' && quarantinedItems().length > 0}
+  <QuarantinePanel {userId} />
 {/if}
 
 {@render children()}
