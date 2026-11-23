@@ -75,3 +75,19 @@ Détail : `docs/superpowers/plans/2026-11-20-apogee-p2b-sauvegarde.md`
 - `npm test` 708/708, `npm run check` 0 erreur, `npm run build` OK. Deux essais réels hors ligne (Chromium, base jetable) : lecture en cache + bandeau, démarrage depuis `/` sans réseau, « Bue » optimiste et resynchro sans doublon, annulation avant envoi et annulation différée conservée après fermeture, avertissement à la déconnexion, cache vidé et non servi à un autre compte.
 - Choix : en-tête `x-apogee-user` refusé par le serveur (409) s'il ne correspond pas à la session ; annulation d'un geste déjà tenté = rejeu puis opération inverse ; délai de 4 s seulement à l'ouverture des pages ; `start_url` `/app` avec `id` `/`.
 - Petites dettes notées : résultats de Background Sync non affichés si aucun onglet ouvert, déplacement hors ligne vers un emplacement non affiché, cache de pages sans limite, date du bandeau = dernier chargement en ligne, un geste rejeté indéfiniment (5xx) bloque la file.
+
+## File de gestes : envoi en arrière-plan (#23) et quarantaine (2026-11-23)
+Spec : `docs/superpowers/specs/2026-11-23-file-gestes-design.md` — plan : `docs/superpowers/plans/2026-11-23-file-gestes.md`
+- [x] Task 1 : essais pendant l'événement `sync` (2, 4, 8, 15, 30, 60 s, échéance 150 s)
+- [x] Task 2 : coups et quarantaine dans la file IndexedDB
+- [x] Task 3 : synchro, coup imputable (sonde `/healthz` 2xx ; 502/503/504 par la sonde), envoi seul, quarantaine
+- [x] Task 4 : état de quarantaine, « Réessayer », « Abandonner »
+- [x] Task 5 : bloc des gestes bloqués dans `/app`
+- [x] Revue finale (opus) + vague de corrections : disjoncteur avec canari, panneau, a11y, doc
+- [ ] Revérifier R-3 sur le téléphone après déploiement (`applied_ops.applied_at`)
+
+### Revue
+- 5 tâches relues une à une (1 boucle de correction), revue finale de branche, vague de corrections relue.
+- `npx vitest run` 807/807, `npm run check` 0 erreur. Au navigateur (375 px, base jetable) : quarantaine avec verdict retenu, gestes suivants envoyés, « Réessayer » (échec puis succès, verdict envoyé après le « Bue »), « Abandonner » avec confirmation. Dans Chromium, appli fermée : le vrai événement `sync` part au retour du réseau, échoue deux fois puis passe à 2 s et 4 s.
+- Dependabot : 0 alerte ouverte, 0 PR ; `npm audit` 0 vulnérabilité.
+- Reste connu : trois gestes fautifs d'affilée bloquent la file (canari toujours le même) ; un 2xx de rejeu peut refermer le disjoncteur pendant une panne d'écriture ; le panneau ne nomme pas le vin.
