@@ -62,18 +62,23 @@ export type TimeZoneOption = { id: string; label: string };
 
 let optionsCache: { hour: number; options: TimeZoneOption[] } | undefined;
 
-/** Every supported zone, sorted, labelled with its current UTC offset ("America/Guadeloupe (UTC−04:00)"). */
+/**
+ * Every supported zone labelled with its current UTC offset ("(UTC−04:00) America/Guadeloupe"),
+ * sorted by that offset (west to east), then by name.
+ */
 export function timeZoneOptions(now: Date = new Date()): TimeZoneOption[] {
   // Offsets only move at daylight-saving changes, which happen on the hour: one computation per hour.
   const hour = Math.floor(now.getTime() / 3_600_000);
   if (optionsCache?.hour === hour) return optionsCache.options;
-  const options = [...supportedZones()].sort().map((id) => {
-    const offsetMin = Math.round(zonedParts(now.getTime(), id).offsetMs / 60_000);
-    const abs = Math.abs(offsetMin);
-    const sign = offsetMin < 0 ? '−' : '+';
-    const offset = `UTC${sign}${String(Math.floor(abs / 60)).padStart(2, '0')}:${String(abs % 60).padStart(2, '0')}`;
-    return { id, label: `${id.replaceAll('_', ' ')} (${offset})` };
-  });
+  const options = [...supportedZones()]
+    .map((id) => ({ id, offsetMin: Math.round(zonedParts(now.getTime(), id).offsetMs / 60_000) }))
+    .sort((a, b) => a.offsetMin - b.offsetMin || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
+    .map(({ id, offsetMin }) => {
+      const abs = Math.abs(offsetMin);
+      const sign = offsetMin < 0 ? '−' : '+';
+      const offset = `UTC${sign}${pad2(Math.floor(abs / 60))}:${pad2(abs % 60)}`;
+      return { id, label: `(${offset}) ${id.replaceAll('_', ' ')}` };
+    });
   optionsCache = { hour, options };
   return options;
 }

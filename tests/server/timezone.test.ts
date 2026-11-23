@@ -4,7 +4,8 @@ import {
   DEFAULT_TIMEZONE,
   canonicalTimeZone,
   timeZoneOptions,
-  localClock
+  localClock,
+  zonedParts
 } from '../../src/lib/server/timezone';
 import { makeTestDb } from '../helpers/db';
 import { setupFirstAdmin } from '../../src/routes/setup/_logic';
@@ -85,20 +86,31 @@ describe('canonicalTimeZone', () => {
 });
 
 describe('timeZoneOptions', () => {
-  it('liste triée, avec le décalage UTC actuel, et chaque option est valide', () => {
+  it('libellé « (UTC±hh:mm) Zone » avec le décalage actuel, et chaque option est valide', () => {
     const opts = timeZoneOptions(new Date('2026-11-23T12:00:00Z'));
-    const ids = opts.map((o) => o.id);
-    expect(ids).toEqual([...ids].sort());
-    expect(ids).toContain('UTC');
-    expect(opts.find((o) => o.id === 'America/Guadeloupe')?.label).toBe('America/Guadeloupe (UTC−04:00)');
-    expect(opts.find((o) => o.id === 'Europe/Paris')?.label).toBe('Europe/Paris (UTC+01:00)');
+    expect(opts.map((o) => o.id)).toContain('UTC');
+    expect(opts.find((o) => o.id === 'America/Guadeloupe')?.label).toBe('(UTC−04:00) America/Guadeloupe');
+    expect(opts.find((o) => o.id === 'Europe/Paris')?.label).toBe('(UTC+01:00) Europe/Paris');
+    expect(opts.find((o) => o.id === 'America/New_York')?.label).toBe('(UTC−05:00) America/New York');
     const kathmandu = canonicalTimeZone('Asia/Kathmandu')!; // Asia/Katmandu on some ICU versions
-    expect(opts.find((o) => o.id === kathmandu)?.label).toBe(`${kathmandu} (UTC+05:45)`);
+    expect(opts.find((o) => o.id === kathmandu)?.label).toBe(`(UTC+05:45) ${kathmandu}`);
     for (const o of opts) expect(canonicalTimeZone(o.id)).toBe(o.id);
+  });
+  it('triée par décalage croissant, puis par nom à décalage égal', () => {
+    const now = new Date('2026-11-23T12:00:00Z');
+    const opts = timeZoneOptions(now);
+    const offset = (id: string) => zonedParts(now.getTime(), id).offsetMs;
+    for (let i = 1; i < opts.length; i++) {
+      const [a, b] = [opts[i - 1].id, opts[i].id];
+      expect(offset(a) < offset(b) || (offset(a) === offset(b) && a < b), `${a} avant ${b}`).toBe(true);
+    }
+    const ids = opts.map((o) => o.id);
+    expect(ids.indexOf('America/Guadeloupe')).toBeLessThan(ids.indexOf('UTC'));
+    expect(ids.indexOf('UTC')).toBeLessThan(ids.indexOf('Europe/Paris'));
   });
   it("suit l'heure d'été", () => {
     expect(timeZoneOptions(new Date('2027-07-01T12:00:00Z')).find((o) => o.id === 'Europe/Paris')?.label).toBe(
-      'Europe/Paris (UTC+02:00)'
+      '(UTC+02:00) Europe/Paris'
     );
   });
 });
