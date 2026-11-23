@@ -11,7 +11,7 @@
   import { pendingOps } from '$lib/offline/pending.svelte';
   import type { CellarRow } from '$lib/server/wines';
   import type { Phase } from '$lib/phase';
-  import { activePhase, visibleSections } from '$lib/home-filter';
+  import { activePhases, togglePhase, visibleSections } from '$lib/home-filter';
 
   let { data } = $props();
 
@@ -24,11 +24,13 @@
   const total = $derived(sections.reduce((n, s) => n + s.rows.reduce((k, r) => k + r.bottles, 0), 0));
 
   // Phase filter: client-side only, applied on the sections above (pending gestures included).
-  let selected = $state<Phase | null>(null);
-  const active = $derived(activePhase(sections, selected));
+  // Phases combine; none selected means all.
+  let selected = $state<Phase[]>([]);
+  const active = $derived(activePhases(sections, selected));
+  const filtering = $derived(active.length > 0);
   const shown = $derived(visibleSections(sections, active));
   const shownBottles = $derived(shown.reduce((n, s) => n + s.rows.reduce((k, r) => k + r.bottles, 0), 0));
-  const toggle = (phase: Phase) => (selected = active === phase ? null : phase);
+  const toggle = (phase: Phase) => (selected = togglePhase(active, phase));
 
   // The wine being estimated (a snapshot of its row: the sheet only needs its id and current window).
   let estimating = $state<CellarRow | null>(null);
@@ -40,7 +42,7 @@
 <header class="head">
   <h1>{m.home_title()}</h1>
   <p class="muted">
-    {active === null ? m.home_total({ count: total }) : m.home_total_filtered({ count: shownBottles, total })}
+    {filtering ? m.home_total_filtered({ count: shownBottles, total }) : m.home_total({ count: total })}
   </p>
 </header>
 
@@ -51,11 +53,11 @@
 {:else}
   {#if sections.length > 1}
     <div class="chips" role="group" aria-label={m.home_filter_label()}>
-      <button type="button" class="chip" class:on={active === null} aria-pressed={active === null} onclick={() => (selected = null)}>
+      <button type="button" class="chip" class:on={!filtering} aria-pressed={!filtering} onclick={() => (selected = [])}>
         {m.home_filter_all()}
       </button>
       {#each sections as section (section.phase)}
-        <button type="button" class="chip" class:on={active === section.phase} aria-pressed={active === section.phase} onclick={() => toggle(section.phase)}>
+        <button type="button" class="chip" class:on={active.includes(section.phase)} aria-pressed={active.includes(section.phase)} onclick={() => toggle(section.phase)}>
           <PhaseBadge phase={section.phase} />
           <span class="count">{section.rows.length}</span>
         </button>
@@ -64,7 +66,7 @@
   {/if}
   <div class="sections">
     {#each shown as section (section.phase)}
-      {#if section.phase === 'too_young' && active === null}
+      {#if section.phase === 'too_young' && !filtering}
         <!-- Not urgent: collapsed by default, the rows show their opening year. -->
         <details class="section">
           <summary>
