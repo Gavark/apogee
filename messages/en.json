@@ -637,5 +637,14 @@
   "verdict_note_label": "Note (optional)",
   "verdict_later": "Later",
   "wine_history_verdict_add": "Add a verdict",
-  "wine_history_verdict_edit": "Change the verdict"
+  "wine_history_verdict_edit": "Change the verdict",
+  "phase_legend_open": "What the phases mean",
+  "phase_legend_title": "The phases",
+  "phase_legend_intro": "Most urgent first.",
+  "phase_hint_past": "Its window has closed: drink it now.",
+  "phase_hint_last_call": "Past its peak, or in the last year of its window.",
+  "phase_hint_peak": "The best time to open it.",
+  "phase_hint_ready": "Good to drink, and it may still improve.",
+  "phase_hint_too_young": "Too young: it opens from the year shown.",
+  "phase_hint_unknown": "No window yet: enter one or ask the AI for an estimate."
 }

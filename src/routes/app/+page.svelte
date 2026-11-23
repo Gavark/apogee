@@ -4,6 +4,7 @@
   import * as m from '$paraglide/messages';
   import Button from '$lib/components/Button.svelte';
   import EmptyState from '$lib/components/EmptyState.svelte';
+  import PhaseLegend from '$lib/components/PhaseLegend.svelte';
   import PhaseBadge from '$lib/components/PhaseBadge.svelte';
   import WineRow from '$lib/components/WineRow.svelte';
   import AiEstimateSheet from '$lib/components/AiEstimateSheet.svelte';
@@ -40,7 +41,10 @@
 <svelte:head><title>{m.home_title()}</title></svelte:head>
 
 <header class="head">
-  <h1>{m.home_title()}</h1>
+  <div class="title-row">
+    <h1>{m.home_title()}</h1>
+    <PhaseLegend />
+  </div>
   <p class="muted">
     {filtering ? m.home_total_filtered({ count: shownBottles, total }) : m.home_total({ count: total })}
   </p>
@@ -110,6 +114,7 @@
 
 <style>
   .head { margin-bottom: var(--s-4); }
+  .title-row { display: flex; align-items: center; justify-content: space-between; gap: var(--s-2); }
   h1 { margin: 0; }
   .muted { margin: 0; color: var(--c-text-muted); }
   .chips {

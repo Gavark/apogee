@@ -637,5 +637,14 @@
   "verdict_note_label": "Note (facultatif)",
   "verdict_later": "Plus tard",
   "wine_history_verdict_add": "Donner un verdict",
-  "wine_history_verdict_edit": "Modifier le verdict"
+  "wine_history_verdict_edit": "Modifier le verdict",
+  "phase_legend_open": "Comprendre les phases",
+  "phase_legend_title": "Les phases",
+  "phase_legend_intro": "Du plus urgent au moins urgent.",
+  "phase_hint_past": "La fenêtre est dépassée : buvez-le sans attendre.",
+  "phase_hint_last_call": "Son apogée est passée, ou c'est la dernière année de sa fenêtre.",
+  "phase_hint_peak": "Le meilleur moment pour l'ouvrir.",
+  "phase_hint_ready": "Bon à boire, il peut encore progresser.",
+  "phase_hint_too_young": "Trop jeune : il s'ouvre à partir de l'année indiquée.",
+  "phase_hint_unknown": "Pas encore de fenêtre : saisissez-la ou demandez une estimation à l'IA."
 }
