@@ -50,7 +50,16 @@
   }
   .open:hover { background: var(--c-bg-sunken); color: var(--c-text); }
   .intro { margin: 0 0 var(--s-3); color: var(--c-text-muted); }
-  .list { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--s-3); }
-  .list li { display: flex; align-items: center; gap: var(--s-3); }
-  .list li > :global(:first-child) { flex: none; }
+  /* Two columns so every sentence shares one left edge, whatever the badge width. */
+  .list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    grid-template-columns: max-content 1fr;
+    align-items: center;
+    gap: var(--s-3) var(--s-2);
+  }
+  .list li { display: contents; }
+  .list li > :global(:first-child) { justify-self: start; }
 </style>

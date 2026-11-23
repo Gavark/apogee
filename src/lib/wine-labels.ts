@@ -1,5 +1,6 @@
 import * as m from '$paraglide/messages';
 import type { Color, WineInputError } from '$lib/server/wines';
+import type { Verdict } from '$lib/stock-ops';
 
 export const COLOR_OPTIONS: { value: Color; label: () => string }[] = [
   { value: 'red', label: m.color_red },
@@ -93,3 +94,12 @@ export function wineErrorMessage(e: WineInputError): string {
 /** Display name of a wine: "Producer - Cuvée", or a placeholder when both are empty. */
 export const wineTitle = (w: { producer: string | null; cuvee: string | null }): string =>
   [w.producer, w.cuvee].filter(Boolean).join(' - ') || m.wine_unnamed();
+
+const VERDICT_LABELS: Record<Verdict, () => string> = {
+  early: m.verdict_early,
+  right: m.verdict_right,
+  late: m.verdict_late
+};
+
+/** The user-facing label of a drinking verdict. */
+export const verdictLabel = (v: Verdict): string => VERDICT_LABELS[v]();

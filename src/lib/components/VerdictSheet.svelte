@@ -5,23 +5,22 @@
   import { reload } from '$lib/offline/pending.svelte';
   import { sendStockOps, SessionExpiredError } from '$lib/stock-client';
   import { VERDICTS, type Verdict } from '$lib/stock-ops';
-  import { showToast } from '$lib/toast.svelte';
+  import { verdictLabel } from '$lib/wine-labels';
   import { reviewOp } from '$lib/verdict';
-  import { closeVerdict, verdictSheet } from '$lib/verdict-sheet.svelte';
-
-  const LABELS: Record<Verdict, () => string> = {
-    early: m.verdict_early,
-    right: m.verdict_right,
-    late: m.verdict_late
-  };
+  import { closeVerdict, dropVerdict, verdictSheet } from '$lib/verdict-sheet.svelte';
 
   const req = $derived(verdictSheet.current);
   let note = $state('');
   let busy = $state(false);
+  let error = $state<string | null>(null);
+
+  // A request that outlives its sheet (route change) must not reopen it later.
+  $effect(() => () => dropVerdict());
 
   // Each new request starts from its own note.
   $effect(() => {
     note = req?.note ?? '';
+    error = null;
   });
 
   async function choose(verdict: Verdict) {
@@ -29,14 +28,15 @@
     // `busy` is set synchronously: a double tap sends one operation.
     if (!current || busy) return;
     busy = true;
+    error = null;
     let queued = false;
     try {
       const [r] = await sendStockOps([reviewOp(current.ref, verdict, note)]);
       queued = r.status === 'queued';
       closeVerdict();
     } catch (e) {
-      // Stay open so the choice can be retried.
-      if (!(e instanceof SessionExpiredError)) showToast(m.wine_err_network());
+      // Stay open so the choice can be retried. Shown inside the sheet: a toast would be inert behind the modal.
+      if (!(e instanceof SessionExpiredError)) error = m.wine_err_network();
     } finally {
       // Queued: nothing changed on the server yet, the overlay already shows it.
       if (!queued) await reload();
@@ -55,11 +55,12 @@
     {#each VERDICTS as v (v)}
       <li>
         <Button variant="secondary" block disabled={busy} aria-pressed={req?.verdict === v} onclick={() => choose(v)}>
-          {LABELS[v]()}
+          {verdictLabel(v)}
         </Button>
       </li>
     {/each}
   </ul>
+  {#if error}<p class="error" role="alert">{error}</p>{/if}
   <Button variant="ghost" block onclick={closeVerdict}>{m.verdict_later()}</Button>
 </Sheet>
 
@@ -72,4 +73,5 @@
     background: var(--c-bg-sunken);
     color: var(--c-accent);
   }
+  .error { color: var(--c-danger); font-size: var(--fs-sm); margin: 0 0 var(--s-2); }
 </style>

@@ -19,7 +19,7 @@
   import { showToast } from '$lib/toast.svelte';
   import { applyPendingReviews } from '$lib/verdict';
   import { askVerdict } from '$lib/verdict-sheet.svelte';
-  import { colorLabel, confidenceLabel, formatLabel, wineTitle } from '$lib/wine-labels';
+  import { colorLabel, confidenceLabel, formatLabel, verdictLabel, wineTitle } from '$lib/wine-labels';
   import { currentYear } from '$lib/phase';
   import type { CellarLot } from '$lib/server/wines';
   import type { OpResult, StockOp } from '$lib/server/stock';
@@ -30,7 +30,6 @@
   const detail = $derived(applyPending(data.detail, pendingOps()));
   const wine = $derived(detail.wine);
   const history = $derived(applyPendingReviews(detail.consumptions, pendingOps()));
-  const VERDICT_LABELS = { early: m.verdict_early, right: m.verdict_right, late: m.verdict_late };
   const lots = $derived(detail.lots.filter((l) => l.quantity > 0));
   const year = $derived(currentYear(data.user?.timezone ?? 'UTC'));
 
@@ -214,7 +213,7 @@
       <ul class="history">
         {#each history as c (c.id)}
           <li>
-            <strong>{c.consumedOn}{c.verdict ? ` · ${VERDICT_LABELS[c.verdict]()}` : ''}</strong>
+            <strong>{c.consumedOn}{c.verdict ? ` · ${verdictLabel(c.verdict)}` : ''}</strong>
             <span class="muted">
               {[
                 c.locationName ? m.wine_history_from({ location: c.locationName }) : null,
@@ -306,7 +305,8 @@
   .history { list-style: none; padding: 0; margin: 0; display: grid; gap: var(--s-3); }
   .history li { display: flex; flex-direction: column; }
   .note { font-size: var(--fs-sm); }
-  .verdict-action { align-self: flex-start; }
+  /* Pull the ghost button back by its padding + border so its text lines up with the row above. */
+  .verdict-action { align-self: flex-start; margin-inline-start: calc(-1 * (var(--s-4) + 1.5px)); }
   .actions { display: flex; gap: var(--s-2); justify-content: space-between; }
   .sheet-form { display: grid; gap: var(--s-3); }
   .photo { padding: 0; border: 1px solid var(--c-border); border-radius: var(--r-card); background: var(--c-bg-card); overflow: hidden; cursor: zoom-in; }

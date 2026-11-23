@@ -3,7 +3,7 @@
   import * as m from '$paraglide/messages';
   import Button from '$lib/components/Button.svelte';
   import Sheet from '$lib/components/Sheet.svelte';
-  import { reload } from '$lib/offline/pending.svelte';
+  import { reload, resultFor } from '$lib/offline/pending.svelte';
   import { newOpId, sendStockOps, SessionExpiredError, undoGesture } from '$lib/stock-client';
   import { showToast } from '$lib/toast.svelte';
   import { reviewRefAfterDrink } from '$lib/verdict';
@@ -50,7 +50,12 @@
           ref,
           verdict: null,
           note: null,
-          onclosed: () => showToast(message, undo)
+          onclosed: () => {
+            // The sheet may stay open a while: the server can have rejected the queued consume since.
+            const late = queued ? resultFor(op.opId) : undefined;
+            if (late?.status === 'rejected') showToast(late.reason === 'empty_lot' ? m.drink_empty_lot() : m.wine_err_op());
+            else showToast(message, undo);
+          }
         });
       } else if (r.status === 'rejected') {
         showToast(r.reason === 'empty_lot' ? m.drink_empty_lot() : m.wine_err_op());

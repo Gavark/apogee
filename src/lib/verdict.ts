@@ -1,5 +1,5 @@
 // Client-side verdict logic: which consumption a verdict targets, the `review` gesture, and the
-// optimistic history. Framework-free (the service worker and plain tests import it).
+// optimistic history. Framework-free, so plain tests can import it.
 import type { ClientOpResult } from '$lib/stock-client';
 import { newOpId } from '$lib/offline/op-id';
 import type { StockOp, Verdict } from '$lib/stock-ops';

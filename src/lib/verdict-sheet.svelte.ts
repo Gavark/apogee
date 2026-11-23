@@ -27,3 +27,8 @@ export function closeVerdict(): void {
   verdictSheet.current = null;
   req.onclosed?.();
 }
+
+/** Forgets the current request without settling it (the sheet is being destroyed). */
+export function dropVerdict(): void {
+  verdictSheet.current = null;
+}
