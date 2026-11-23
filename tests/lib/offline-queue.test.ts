@@ -8,8 +8,12 @@ import {
   enqueue,
   getActiveUser,
   listQueued,
+  quarantine,
+  releaseQuarantine,
   removeQueued,
   setActiveUser,
+  splitQuarantine,
+  strike,
   _resetForTests
 } from '$lib/offline/queue';
 import type { StockOp } from '$lib/server/stock';
@@ -138,5 +142,59 @@ describe('utilisateur actif (pour le service worker)', () => {
     expect((await listQueued(1)).map((q) => q.op.opId)).toEqual(['old']);
     await setActiveUser(1);
     expect(await getActiveUser()).toBe(1);
+  });
+});
+
+const consume = (opId: string): StockOp => ({ opId, kind: 'consume', lotId: 1, consumedOn: '2026-01-01' });
+const review = (opId: string, consumeOpId: string): StockOp =>
+  ({ opId, kind: 'review', consumeOpId, verdict: 'right', note: null });
+
+describe('coups et quarantaine', () => {
+  it('strike incrémente et renvoie le total ; ligne absente → 0', async () => {
+    await enqueue(1, adj('a'));
+    expect(await strike('a')).toBe(1);
+    expect(await strike('a')).toBe(2);
+    expect((await listQueued(1))[0].strikes).toBe(2);
+    expect(await strike('absent')).toBe(0);
+  });
+
+  it('quarantine puis listQueued → quarantinedAt présent ; releaseQuarantine(id, 4) → absent, strikes 4', async () => {
+    await enqueue(1, adj('a'));
+    expect((await listQueued(1))[0]).not.toHaveProperty('quarantinedAt');
+    await quarantine('a', 123);
+    expect((await listQueued(1))[0].quarantinedAt).toBe(123);
+    expect(await releaseQuarantine('a', 4)).toBe(true);
+    const row = (await listQueued(1))[0];
+    expect(row).not.toHaveProperty('quarantinedAt');
+    expect(row.strikes).toBe(4);
+    expect(await releaseQuarantine('absent', 4)).toBe(false);
+  });
+
+  it('splitQuarantine : consume en quarantaine + review qui le vise + adjust → sendable [adjust], quarantined [{ row: consume, held: [review] }]', async () => {
+    await enqueue(1, consume('c'));
+    await enqueue(1, review('r', 'c'));
+    await enqueue(1, adj('a'));
+    await quarantine('c');
+    const { sendable, quarantined } = splitQuarantine(await listQueued(1));
+    expect(sendable.map((q) => q.op.opId)).toEqual(['a']);
+    expect(quarantined).toHaveLength(1);
+    expect(quarantined[0].row.op.opId).toBe('c');
+    expect(quarantined[0].held.map((q) => q.op.opId)).toEqual(['r']);
+  });
+
+  it('splitQuarantine : review dont le consumeOpId n’est pas en file → sendable', async () => {
+    await enqueue(1, review('r', 'gone'));
+    const { sendable, quarantined } = splitQuarantine(await listQueued(1));
+    expect(sendable.map((q) => q.op.opId)).toEqual(['r']);
+    expect(quarantined).toEqual([]);
+  });
+
+  it('review lui-même en quarantaine → quarantined avec held []', async () => {
+    await enqueue(1, review('r', 'c'));
+    await quarantine('r');
+    const { sendable, quarantined } = splitQuarantine(await listQueued(1));
+    expect(sendable).toEqual([]);
+    expect(quarantined.map((q) => q.row.op.opId)).toEqual(['r']);
+    expect(quarantined[0].held).toEqual([]);
   });
 });

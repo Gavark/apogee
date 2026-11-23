@@ -13,6 +13,10 @@ export type QueuedOp = {
   attempts: number;
   undo?: true;
   inverseOf?: string;
+  /** Failures the server blamed on this gesture itself (not on the network). */
+  strikes?: number;
+  /** Set when the gesture is blocked after too many strikes: it is no longer sent until released. */
+  quarantinedAt?: number;
 };
 
 const DB_NAME = 'apogee-offline';
@@ -118,13 +122,15 @@ async function addRow(store: IDBObjectStore, userId: number, op: StockOp, invers
 
 export async function listQueued(userId: number): Promise<QueuedOp[]> {
   const rows = await tx('readonly', (store) => allForUser(store, userId));
-  return rows.map(({ op, userId: u, queuedAt, attempts, undo, inverseOf }) => ({
+  return rows.map(({ op, userId: u, queuedAt, attempts, undo, inverseOf, strikes, quarantinedAt }) => ({
     op,
     userId: u,
     queuedAt,
     attempts,
     ...(undo ? { undo } : {}),
-    ...(inverseOf !== undefined ? { inverseOf } : {})
+    ...(inverseOf !== undefined ? { inverseOf } : {}),
+    ...(strikes !== undefined ? { strikes } : {}),
+    ...(quarantinedAt !== undefined ? { quarantinedAt } : {})
   }));
 }
 
@@ -159,6 +165,54 @@ export function bumpAttempts(opIds: string[]): Promise<void> {
       if (row) await wrap(store.put({ ...row, attempts: row.attempts + 1 }));
     }
   });
+}
+
+/** Adds one strike to a queued gesture and resolves the new total (0 when it is no longer queued). */
+export function strike(opId: string): Promise<number> {
+  return tx('readwrite', async (store) => {
+    const row = await wrap(store.get(opId) as IDBRequest<Stored | undefined>);
+    if (!row) return 0;
+    const strikes = (row.strikes ?? 0) + 1;
+    await wrap(store.put({ ...row, strikes }));
+    return strikes;
+  });
+}
+
+/** Blocks a queued gesture: it stays in the queue but is no longer sent until released. */
+export function quarantine(opId: string, at: number = Date.now()): Promise<void> {
+  return tx('readwrite', async (store) => {
+    const row = await wrap(store.get(opId) as IDBRequest<Stored | undefined>);
+    if (row) await wrap(store.put({ ...row, quarantinedAt: at }));
+  });
+}
+
+/** Lifts the quarantine and sets the strike count; resolves false when the gesture is no longer queued. */
+export function releaseQuarantine(opId: string, strikes: number): Promise<boolean> {
+  return tx('readwrite', async (store) => {
+    const row = await wrap(store.get(opId) as IDBRequest<Stored | undefined>);
+    if (!row) return false;
+    const { quarantinedAt: _dropped, ...rest } = row;
+    await wrap(store.put({ ...rest, strikes }));
+    return true;
+  });
+}
+
+/** A quarantined gesture and the reviews held back because they target it (a consume). */
+export type QuarantineItem = { row: QueuedOp; held: QueuedOp[] };
+
+/** Pure: splits the queue into what can be sent and what is blocked (with the reviews depending on it). */
+export function splitQuarantine(rows: QueuedOp[]): { sendable: QueuedOp[]; quarantined: QuarantineItem[] } {
+  const blocked = rows.filter((r) => r.quarantinedAt !== undefined);
+  const heldIds = new Set<string>();
+  const quarantined = blocked.map((row) => {
+    const held = rows.filter(
+      (r) => r.quarantinedAt === undefined && r.op.kind === 'review' && r.op.consumeOpId === row.op.opId
+    );
+    for (const h of held) heldIds.add(h.op.opId);
+    return { row, held };
+  });
+  const sendable = rows.filter((r) => r.quarantinedAt === undefined && !heldIds.has(r.op.opId));
+  return { sendable, quarantined };
 }
 
 export function countQueued(userId: number): Promise<number> {
