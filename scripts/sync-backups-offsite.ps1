@@ -5,7 +5,7 @@
 # Works with Windows PowerShell 5.1 and PowerShell 7. ASCII only on purpose:
 # 5.1 misreads UTF-8 files without a BOM.
 #
-#   powershell -File scripts\sync-backups-offsite.ps1 -Destination 'G:\Mon Drive\Perso\Backup\Apogee' -DryRun
+#   powershell -File scripts\sync-backups-offsite.ps1 -Destination 'G:\My Drive\Backups\Apogee' -DryRun
 param(
   [Parameter(Mandatory = $true)]
   [string]$Destination,
