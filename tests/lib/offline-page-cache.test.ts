@@ -15,6 +15,7 @@ import {
   networkDeadlineFor,
   networkOrCopy,
   offlineRedirectFor,
+  parseStoredAt,
   stampedHeaders,
   trimPageCache
 } from '$lib/offline/page-cache';
@@ -385,6 +386,29 @@ describe('entriesToEvict', () => {
   it('/app?filtre est évinçable comme les autres', () => {
     const entries = [at('/app?color=red', 1), at('/app', 2), at('/app/cave', 3)];
     expect(entriesToEvict(entries, 2)).toEqual([`${ORIGIN}/app?color=red`]);
+    const withData = [at('/app?color=red', 1), at('/app/__data.json?color=red', 1), at('/app', 2), at('/app/__data.json', 2)];
+    expect(entriesToEvict(withData, 2)).toEqual([`${ORIGIN}/app?color=red`, `${ORIGIN}/app/__data.json?color=red`]);
+  });
+
+  it('le HTML et les données d’une fiche partent ensemble', () => {
+    const entries = [at('/app/wines/1', 1), at('/app/wines/1/__data.json', 1), at('/app/wines/2', 2), at('/app/wines/2/__data.json', 2)];
+    expect(entriesToEvict(entries, 2)).toEqual([`${ORIGIN}/app/wines/1`, `${ORIGIN}/app/wines/1/__data.json`]);
+  });
+
+  it('une fiche aux données récentes mais au HTML ancien est gardée entière', () => {
+    const entries = [at('/app/wines/1', 1), at('/app/wines/2', 5), at('/app/wines/2/__data.json', 6), at('/app/wines/1/__data.json', 9)];
+    expect(entriesToEvict(entries, 2)).toEqual([`${ORIGIN}/app/wines/2`, `${ORIGIN}/app/wines/2/__data.json`]);
+  });
+});
+
+describe('parseStoredAt', () => {
+  it('lit un nombre, sinon null', () => {
+    expect(parseStoredAt('1234')).toBe(1234);
+    expect(parseStoredAt(null)).toBeNull();
+    expect(parseStoredAt(undefined)).toBeNull();
+    expect(parseStoredAt('')).toBeNull();
+    expect(parseStoredAt('abc')).toBeNull();
+    expect(parseStoredAt('Infinity')).toBeNull();
   });
 });
 
@@ -406,7 +430,8 @@ describe('trimPageCache', () => {
     async keys() {
       return [...this.entries.keys()].map((url) => new Request(url));
     }
-    async match(req: Request) {
+    async match(req: Request, options?: CacheQueryOptions) {
+      expect(options).toEqual({ ignoreVary: true });
       return this.entries.get(req.url);
     }
     async delete(req: Request) {

@@ -199,24 +199,56 @@ export function stampedHeaders(headers: HeadersInit, now: number): Headers {
   return stamped;
 }
 
-/** The installed app's start page (`/` redirects to it offline), and its data: never evicted. */
-function isProtected(url: string): boolean {
-  const { pathname, search } = new URL(url);
-  return search === '' && (pathname === '/app' || pathname === '/app/__data.json');
+/** The stored-at header's value as a number, or null when absent or not a finite number. */
+export function parseStoredAt(raw: string | null | undefined): number | null {
+  if (raw === null || raw === undefined || raw.trim() === '') return null;
+  const n = Number(raw);
+  return Number.isFinite(n) ? n : null;
+}
+
+/** A page is its HTML and its `__data.json`: one URL once the data suffix is dropped (query kept). */
+function pageOf(url: string): string {
+  const u = new URL(url);
+  if (u.pathname.endsWith(DATA_SUFFIX)) u.pathname = u.pathname.slice(0, -DATA_SUFFIX.length) || '/';
+  return u.href;
+}
+
+/** The installed app's start page (`/` redirects to it offline): `/app` without parameters, HTML and data. Never evicted. */
+function isProtectedPage(page: string): boolean {
+  const { pathname, search } = new URL(page);
+  return search === '' && pathname === '/app';
 }
 
 /**
- * The URLs to delete, oldest first, to get back down to `max`. Equal times keep the input order,
- * no time (null) counts as older than any. Protected entries count in the total but are never
- * returned: if only they remain above `max`, it stops there.
+ * The URLs to delete to get back down to `max` entries. Whole pages go (HTML and data together),
+ * the one stored longest ago first: a page is as recent as its newest entry, no time (null) counts
+ * as older than any, equal times keep the input order. The protected page is never returned: if
+ * only it remains above `max`, it stops there.
  */
 export function entriesToEvict(entries: { url: string; storedAt: number | null }[], max: number): string[] {
   if (entries.length <= max) return [];
-  const oldestFirst = entries
-    .filter((e) => !isProtected(e.url))
-    .map((e, i) => ({ ...e, i }))
+  const pages = new Map<string, { urls: string[]; storedAt: number | null; i: number }>();
+  for (const e of entries) {
+    const key = pageOf(e.url);
+    const page = pages.get(key);
+    if (!page) pages.set(key, { urls: [e.url], storedAt: e.storedAt, i: pages.size });
+    else {
+      page.urls.push(e.url);
+      if (e.storedAt !== null && (page.storedAt === null || e.storedAt > page.storedAt)) page.storedAt = e.storedAt;
+    }
+  }
+  const oldestFirst = [...pages.entries()]
+    .filter(([key]) => !isProtectedPage(key))
+    .map(([, page]) => page)
     .sort((a, b) => (a.storedAt ?? -Infinity) - (b.storedAt ?? -Infinity) || a.i - b.i);
-  return oldestFirst.slice(0, entries.length - max).map((e) => e.url);
+  const doomed: string[] = [];
+  let remaining = entries.length;
+  for (const page of oldestFirst) {
+    if (remaining <= max) break;
+    doomed.push(...page.urls);
+    remaining -= page.urls.length;
+  }
+  return doomed;
 }
 
 /** Reads a cache's storage times and deletes what entriesToEvict names. Best effort: never throws. */
@@ -230,9 +262,8 @@ export async function trimPageCache(
     const entries = await Promise.all(
       requests.map(async (request) => {
         const hit = await cache.match(request, { ignoreVary: true });
-        const raw = hit?.headers.get(STORED_AT_HEADER);
-        const n = raw === null || raw === undefined || raw.trim() === '' ? NaN : Number(raw);
-        return { url: request.url, storedAt: Number.isFinite(n) ? n : null };
+        const storedAt = parseStoredAt(hit?.headers.get(STORED_AT_HEADER));
+        return { url: request.url, storedAt };
       })
     );
     const doomed = new Set(entriesToEvict(entries, max));
