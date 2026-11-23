@@ -23,7 +23,7 @@ export function applyPending<T extends { lots: Lot[]; bottles: number }>(row: T,
       );
       if (dest) dest.quantity += moved;
     }
-    // unconsume: consumption is not shown on the row.
+    // unconsume, review: consumptions are not shown on the row.
   }
   return { ...row, lots, bottles: lots.reduce((n, l) => n + l.quantity, 0) };
 }

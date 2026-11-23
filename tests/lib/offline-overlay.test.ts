@@ -55,4 +55,9 @@ describe('applyPending', () => {
     applyPending(input, [{ opId: 'a', kind: 'adjust', lotId: 1, delta: -1 }]);
     expect(input).toEqual(row());
   });
+
+  it('review : la ligne ne change pas', () => {
+    const op: StockOp = { opId: 'r', kind: 'review', consumptionId: 5, verdict: 'late', note: null };
+    expect(applyPending(row(), [op])).toEqual(row());
+  });
 });

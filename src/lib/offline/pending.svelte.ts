@@ -196,6 +196,9 @@ export function requestBackgroundSync(): void {
  */
 function handleOutcome(userId: number, out: SyncOutcome): void {
   if (userId !== owner) return; // not the state on screen
+  // Known before applyResults drops the rejected entries: a rejected verdict is no failure to report
+  // (its "Bue" was undone or is gone), the data is still reloaded.
+  const reviews = new Set(state.entries.filter((e) => e.op.kind === 'review').map((e) => e.op.opId));
   applyResults(
     out.results,
     out.dropped.map((o) => o.opId)
@@ -206,7 +209,7 @@ function handleOutcome(userId: number, out: SyncOutcome): void {
   const others = out.results.filter((r) => !claimed.has(r.opId) && !undone.has(r.opId));
   const othersDropped = out.dropped.filter((o) => !claimed.has(o.opId) && !undone.has(o.opId));
   const changed = others.length > 0 || othersDropped.length > 0 || undone.size > 0;
-  settling = settling.then(() => afterSync(userId, others, othersDropped, changed)).catch(() => {});
+  settling = settling.then(() => afterSync(userId, others, othersDropped, changed, reviews)).catch(() => {});
 }
 
 onSyncOutcome(handleOutcome);
@@ -226,12 +229,12 @@ function swOutcome(data: unknown): { userId: number; outcome: SyncOutcome } | nu
  * Re-reads the queue; for ops nobody is waiting on, warns about failures; reloads the data when
  * something changed out of a caller's sight.
  */
-async function afterSync(userId: number, others: OpResult[], othersDropped: StockOp[], changed: boolean): Promise<void> {
+async function afterSync(userId: number, others: OpResult[], othersDropped: StockOp[], changed: boolean, reviews: Set<string>): Promise<void> {
   if (userId !== owner) return; // the user changed since: nothing of theirs on screen any more
   const vanished = await refreshPending(userId).catch((): StockOp[] => []);
   if (!changed && vanished.length === 0) return;
   const emptied = others.some((r) => r.status === 'partial' || (r.status === 'rejected' && r.reason === 'empty_lot'));
-  const failed = othersDropped.length > 0 || others.some((r) => r.status === 'rejected' && r.reason !== 'empty_lot');
+  const failed = othersDropped.length > 0 || others.some((r) => r.status === 'rejected' && r.reason !== 'empty_lot' && !reviews.has(r.opId));
   if (emptied) showToast(m.drink_empty_lot());
   else if (failed) showToast(m.offline_op_failed());
   await reload();
