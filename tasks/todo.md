@@ -88,6 +88,6 @@ Spec : `docs/superpowers/specs/2026-11-23-file-gestes-design.md` — plan : `doc
 
 ### Revue
 - 5 tâches relues une à une (1 boucle de correction), revue finale de branche, vague de corrections relue.
-- `npx vitest run` 807/807, `npm run check` 0 erreur. Au navigateur (375 px, base jetable) : quarantaine avec verdict retenu, gestes suivants envoyés, « Réessayer » (échec puis succès, verdict envoyé après le « Bue »), « Abandonner » avec confirmation. Dans Chromium, appli fermée : le vrai événement `sync` part au retour du réseau, échoue deux fois puis passe à 2 s et 4 s.
+- `npx vitest run` 810/810, `npm run check` 0 erreur. Au navigateur (375 px, base jetable) : quarantaine avec verdict retenu, gestes suivants envoyés, « Réessayer » (échec puis succès, verdict envoyé après le « Bue »), « Abandonner » avec confirmation. Dans Chromium, appli fermée : le vrai événement `sync` part au retour du réseau, échoue deux fois puis passe à 2 s et 4 s.
 - Dependabot : 0 alerte ouverte, 0 PR ; `npm audit` 0 vulnérabilité.
-- Reste connu : trois gestes fautifs d'affilée bloquent la file (canari toujours le même) ; un 2xx de rejeu peut refermer le disjoncteur pendant une panne d'écriture ; le panneau ne nomme pas le vin.
+- Rotation du canari ajoutée (trois gestes fautifs d'affilée ne bloquent plus la file), relue. Reste connu : un 2xx de rejeu peut refermer le disjoncteur pendant une panne d'écriture ; le panneau ne nomme pas le vin.
