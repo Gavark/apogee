@@ -58,8 +58,9 @@ export function sweepOrphanPhotos(db: DB, dir: string, now: Date): SweepResult {
   const winePaths = new Set(
     db.selectDistinct({ p: wines.labelPhoto }).from(wines).where(isNotNull(wines.labelPhoto)).all().map((r) => r.p!)
   );
-  if (winePaths.size === 0) {
-    console.warn('[photos] sweep skipped: no wine references a photo');
+  // Wrong database (or wrong PHOTOS_DIR): not a single stored photo belongs to a wine.
+  if (!candidates.some((c) => winePaths.has(c))) {
+    console.warn('[photos] sweep skipped: no wine photo found on disk');
     result.skipped = 'no_references';
     return result;
   }

@@ -89,7 +89,7 @@ async function dropCachedHtml(): Promise<{ url: URL; storedAt: number | null }[]
 async function refetch(url: URL, storedAt: number | null): Promise<void> {
   try {
     const res = await fetch(url, { credentials: 'same-origin' });
-    if (isStorable(res)) await store(url, res, storedAt);
+    if (isStorable(res)) await store(url, res, storedAt ?? 0); // unstamped (pre-upgrade) page stays the oldest
   } catch {
     // offline or logged out: cached again on the next visit
   }

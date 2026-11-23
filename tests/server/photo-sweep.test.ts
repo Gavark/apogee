@@ -171,7 +171,18 @@ describe('sweepOrphanPhotos', () => {
     expect(r.skipped).toBe('no_references');
     expect(r.removed).toEqual([]);
     expect(existsSync(join(dir, p))).toBe(true);
-    expect(warn).toHaveBeenCalledWith('[photos] sweep skipped: no wine references a photo');
+    expect(warn).toHaveBeenCalledWith('[photos] sweep skipped: no wine photo found on disk');
+  });
+
+  it("ne supprime rien si aucune photo référencée n'est présente sur le disque (mauvaise base)", () => {
+    mkWine(uuidPath());
+    const orphan = uuidPath();
+    put(orphan, 30);
+    const r = sweepOrphanPhotos(tdb.db, dir, NOW);
+    expect(r.skipped).toBe('no_references');
+    expect(r.removed).toEqual([]);
+    expect(existsSync(join(dir, orphan))).toBe(true);
+    expect(warn).toHaveBeenCalledWith('[photos] sweep skipped: no wine photo found on disk');
   });
 
   it('dossier photos absent : résultat vide, ne lève pas', () => {
@@ -256,8 +267,6 @@ describe('runPhotoSweepTick', () => {
   });
 
   it('ne retente pas le même jour si le ménage lève une erreur', () => {
-    const bad = join(dir, 'file');
-    writeFileSync(bad, 'x');
     const broken = { select: () => { throw new Error('boom'); }, selectDistinct: () => { throw new Error('boom'); } };
     put(uuidPath(), 30);
     expect(() => runPhotoSweepTick(broken as never, new Date('2026-11-23T13:00:00Z'), dir, PARIS)).toThrow();
