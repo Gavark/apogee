@@ -186,3 +186,89 @@ export async function clearPageCache(): Promise<void> {
   if (typeof caches === 'undefined') return;
   await caches.delete(PAGE_CACHE);
 }
+
+/** The most pages kept; past it the oldest go first (the cache would otherwise grow with every wine opened). */
+export const MAX_PAGE_ENTRIES = 120;
+/** When a copy was stored (Unix milliseconds): the Cache API keeps no date of its own. */
+export const STORED_AT_HEADER = 'x-apogee-stored-at';
+
+/** The given headers plus the time the copy is stored. */
+export function stampedHeaders(headers: HeadersInit, now: number): Headers {
+  const stamped = new Headers(headers);
+  stamped.set(STORED_AT_HEADER, String(now));
+  return stamped;
+}
+
+/** The stored-at header's value as a number, or null when absent or not a finite number. */
+export function parseStoredAt(raw: string | null | undefined): number | null {
+  if (raw === null || raw === undefined || raw.trim() === '') return null;
+  const n = Number(raw);
+  return Number.isFinite(n) ? n : null;
+}
+
+/** A page is its HTML and its `__data.json`: one URL once the data suffix is dropped (query kept). */
+function pageOf(url: string): string {
+  const u = new URL(url);
+  if (u.pathname.endsWith(DATA_SUFFIX)) u.pathname = u.pathname.slice(0, -DATA_SUFFIX.length) || '/';
+  return u.href;
+}
+
+/** The installed app's start page (`/` redirects to it offline): `/app` without parameters, HTML and data. Never evicted. */
+function isProtectedPage(page: string): boolean {
+  const { pathname, search } = new URL(page);
+  return search === '' && pathname === '/app';
+}
+
+/**
+ * The URLs to delete to get back down to `max` entries. Whole pages go (HTML and data together),
+ * the one stored longest ago first: a page is as recent as its newest entry, no time (null) counts
+ * as older than any, equal times keep the input order. The protected page is never returned: if
+ * only it remains above `max`, it stops there.
+ */
+export function entriesToEvict(entries: { url: string; storedAt: number | null }[], max: number): string[] {
+  if (entries.length <= max) return [];
+  const pages = new Map<string, { urls: string[]; storedAt: number | null; i: number }>();
+  for (const e of entries) {
+    const key = pageOf(e.url);
+    const page = pages.get(key);
+    if (!page) pages.set(key, { urls: [e.url], storedAt: e.storedAt, i: pages.size });
+    else {
+      page.urls.push(e.url);
+      if (e.storedAt !== null && (page.storedAt === null || e.storedAt > page.storedAt)) page.storedAt = e.storedAt;
+    }
+  }
+  const oldestFirst = [...pages.entries()]
+    .filter(([key]) => !isProtectedPage(key))
+    .map(([, page]) => page)
+    .sort((a, b) => (a.storedAt ?? -Infinity) - (b.storedAt ?? -Infinity) || a.i - b.i);
+  const doomed: string[] = [];
+  let remaining = entries.length;
+  for (const page of oldestFirst) {
+    if (remaining <= max) break;
+    doomed.push(...page.urls);
+    remaining -= page.urls.length;
+  }
+  return doomed;
+}
+
+/** Reads a cache's storage times and deletes what entriesToEvict names. Best effort: never throws. */
+export async function trimPageCache(
+  cache: Pick<Cache, 'keys' | 'match' | 'delete'>,
+  max: number = MAX_PAGE_ENTRIES
+): Promise<void> {
+  try {
+    const requests = await cache.keys();
+    if (requests.length <= max) return;
+    const entries = await Promise.all(
+      requests.map(async (request) => {
+        const hit = await cache.match(request, { ignoreVary: true });
+        const storedAt = parseStoredAt(hit?.headers.get(STORED_AT_HEADER));
+        return { url: request.url, storedAt };
+      })
+    );
+    const doomed = new Set(entriesToEvict(entries, max));
+    for (const request of requests) if (doomed.has(request.url)) await cache.delete(request);
+  } catch {
+    // keeping a few pages too many is harmless; failing to store the page is not
+  }
+}

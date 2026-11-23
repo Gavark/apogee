@@ -3,7 +3,7 @@ import type { BaseSQLiteDatabase } from 'drizzle-orm/sqlite-core';
 import * as schema from './db/schema';
 import { NotFoundError, type HouseholdCtx } from './context';
 import { zonedParts } from './timezone';
-import { isHouseholdPhotoPath, readPhoto, savePhoto, type PhotoMime } from './photos';
+import { cleanupQuietly, deletePhoto, isHouseholdPhotoPath, readPhoto, savePhoto, type PhotoMime } from './photos';
 import { AiError, type AiErrorCode, type AiProvider, type LabelAnalysis, type LabelHints } from './ai/types';
 
 type DB = BaseSQLiteDatabase<'sync', unknown, typeof schema>;
@@ -70,11 +70,13 @@ export async function analyzeAndStore(
 ): Promise<AnalysisOutcome> {
   let photoPath: string | null = null;
   let image: { data: Uint8Array; mimeType: PhotoMime } | null = null;
+  let savedNew = false;
 
   if (input.photo) {
     try {
       const saved = savePhoto(input.photosDir, ctx.householdId, input.photo);
       photoPath = saved.path;
+      savedNew = true;
       image = { data: input.photo, mimeType: saved.mime };
     } catch (e) {
       if (e instanceof RangeError) return { ok: false, analysisId: null, error: 'invalid_photo' };
@@ -91,35 +93,41 @@ export async function analyzeAndStore(
     }
   }
 
-  if (!provider) {
-    const analysisId = insertRow(db, ctx, { photoPath, errorCode: 'not_configured' });
-    return { ok: false, analysisId, error: 'not_configured' };
-  }
-
-  if (input.dailyLimit > 0 && countAnalysesToday(db, ctx.householdId, input.timeZone) >= input.dailyLimit) {
-    const analysisId = insertRow(db, ctx, { photoPath, errorCode: 'limit_reached' });
-    return { ok: false, analysisId, error: 'limit_reached' };
-  }
-
+  // Anything failing after the photo was written (e.g. the row cannot be stored) must not leave it orphaned.
   try {
-    const { analysis, model } = await provider.analyzeLabel({
-      image,
-      hints: input.hints,
-      locale: input.locale,
-      currentYear: input.currentYear
-    });
-    const analysisId = insertRow(db, ctx, {
-      photoPath,
-      result: JSON.stringify(analysis),
-      model
-    });
-    return { ok: true, analysisId, analysis, model };
+    if (!provider) {
+      const analysisId = insertRow(db, ctx, { photoPath, errorCode: 'not_configured' });
+      return { ok: false, analysisId, error: 'not_configured' };
+    }
+
+    if (input.dailyLimit > 0 && countAnalysesToday(db, ctx.householdId, input.timeZone) >= input.dailyLimit) {
+      const analysisId = insertRow(db, ctx, { photoPath, errorCode: 'limit_reached' });
+      return { ok: false, analysisId, error: 'limit_reached' };
+    }
+
+    try {
+      const { analysis, model } = await provider.analyzeLabel({
+        image,
+        hints: input.hints,
+        locale: input.locale,
+        currentYear: input.currentYear
+      });
+      const analysisId = insertRow(db, ctx, {
+        photoPath,
+        result: JSON.stringify(analysis),
+        model
+      });
+      return { ok: true, analysisId, analysis, model };
+    } catch (e) {
+      let error: AiErrorCode = 'unavailable';
+      if (!(e instanceof AiError)) console.error('label analysis failed:', e instanceof Error ? e.name : 'unknown');
+      else error = e.code;
+      const analysisId = insertRow(db, ctx, { photoPath, errorCode: error });
+      return { ok: false, analysisId, error };
+    }
   } catch (e) {
-    let error: AiErrorCode = 'unavailable';
-    if (!(e instanceof AiError)) console.error('label analysis failed:', e instanceof Error ? e.name : 'unknown');
-    else error = e.code;
-    const analysisId = insertRow(db, ctx, { photoPath, errorCode: error });
-    return { ok: false, analysisId, error };
+    if (savedNew) cleanupQuietly(() => deletePhoto(input.photosDir, photoPath));
+    throw e;
   }
 }
 

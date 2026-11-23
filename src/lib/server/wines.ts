@@ -21,7 +21,7 @@ import {
 
 type DB = BaseSQLiteDatabase<'sync', unknown, typeof schema>;
 
-const { wines, stockLots, locations, consumptions, users } = schema;
+const { wines, stockLots, locations, consumptions, users, labelAnalyses } = schema;
 
 export type { Color };
 
@@ -361,7 +361,10 @@ export function deleteWine(
       .run();
     if (!wine.labelPhoto) return null;
     const stillUsed = tx.select({ id: wines.id }).from(wines).where(eq(wines.labelPhoto, wine.labelPhoto)).get();
-    return stillUsed ? null : wine.labelPhoto;
+    if (stillUsed) return null;
+    // The file goes away: analyses must not keep a dead path.
+    tx.update(labelAnalyses).set({ photoPath: null }).where(eq(labelAnalyses.photoPath, wine.labelPhoto)).run();
+    return wine.labelPhoto;
   });
   // Only once the delete has committed; a photo another wine still points to is kept.
   cleanupQuietly(() => deletePhoto(photosDirPath, photo));

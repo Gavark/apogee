@@ -1,17 +1,23 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
+  MAX_PAGE_ENTRIES,
   PAGE_CACHE,
+  STORED_AT_HEADER,
   cacheKeyFor,
   dataBodyToServe,
   dataBodyToStore,
   dataUrlFor,
+  entriesToEvict,
   hasFullDataCopy,
   isOfflineReadable,
   reloadAfterColdStart,
   isStorable,
   networkDeadlineFor,
   networkOrCopy,
-  offlineRedirectFor
+  offlineRedirectFor,
+  parseStoredAt,
+  stampedHeaders,
+  trimPageCache
 } from '$lib/offline/page-cache';
 
 const ORIGIN = 'https://cave.example';
@@ -339,5 +345,143 @@ describe('networkDeadlineFor (délai réseau limité aux ouvertures de page)', (
     vi.useRealTimers();
     const failed = await networkOrCopy(Promise.reject(new TypeError('Failed to fetch')), new Response('copie'), null);
     await expect(failed.text()).resolves.toBe('copie');
+  });
+});
+
+describe('entriesToEvict', () => {
+  const at = (path: string, storedAt: number | null) => ({ url: `${ORIGIN}${path}`, storedAt });
+  const five = [1, 2, 3, 4, 5].map((n) => at(`/app/wines/${n}`, n));
+
+  it('rien à supprimer sous le plafond', () => {
+    expect(entriesToEvict(five, 5)).toEqual([]);
+    expect(entriesToEvict(five, 10)).toEqual([]);
+  });
+
+  it('supprime les plus anciennes jusqu’au plafond', () => {
+    expect(entriesToEvict([...five].reverse(), 3)).toEqual([`${ORIGIN}/app/wines/1`, `${ORIGIN}/app/wines/2`]);
+  });
+
+  it('garde l’ordre d’entrée à horodatage égal', () => {
+    const same = [at('/app/wines/1', 7), at('/app/wines/2', 7), at('/app/wines/3', 7)];
+    expect(entriesToEvict(same, 1)).toEqual([`${ORIGIN}/app/wines/1`, `${ORIGIN}/app/wines/2`]);
+  });
+
+  it('une entrée sans horodatage passe avant les autres', () => {
+    expect(entriesToEvict([at('/app/wines/1', 1), at('/app/wines/2', null), at('/app/wines/3', 3)], 2)).toEqual([
+      `${ORIGIN}/app/wines/2`
+    ]);
+  });
+
+  it('ne supprime jamais /app ni /app/__data.json', () => {
+    const entries = [at('/app', 1), at('/app/__data.json', 2), at('/app/wines/3', 3), at('/app/wines/4', 4), at('/app/wines/5', 5)];
+    expect(entriesToEvict(entries, 3)).toEqual([`${ORIGIN}/app/wines/3`, `${ORIGIN}/app/wines/4`]);
+  });
+
+  it('s’arrête quand il ne reste que des entrées protégées', () => {
+    expect(entriesToEvict([at('/app', null), at('/app/__data.json', null), at('/app/wines/1', 1)], 1)).toEqual([
+      `${ORIGIN}/app/wines/1`
+    ]);
+  });
+
+  it('/app?filtre est évinçable comme les autres', () => {
+    const entries = [at('/app?color=red', 1), at('/app', 2), at('/app/cave', 3)];
+    expect(entriesToEvict(entries, 2)).toEqual([`${ORIGIN}/app?color=red`]);
+    const withData = [at('/app?color=red', 1), at('/app/__data.json?color=red', 1), at('/app', 2), at('/app/__data.json', 2)];
+    expect(entriesToEvict(withData, 2)).toEqual([`${ORIGIN}/app?color=red`, `${ORIGIN}/app/__data.json?color=red`]);
+  });
+
+  it('le HTML et les données d’une fiche partent ensemble', () => {
+    const entries = [at('/app/wines/1', 1), at('/app/wines/1/__data.json', 1), at('/app/wines/2', 2), at('/app/wines/2/__data.json', 2)];
+    expect(entriesToEvict(entries, 2)).toEqual([`${ORIGIN}/app/wines/1`, `${ORIGIN}/app/wines/1/__data.json`]);
+  });
+
+  it('une fiche aux données récentes mais au HTML ancien est gardée entière', () => {
+    const entries = [at('/app/wines/1', 1), at('/app/wines/2', 5), at('/app/wines/2/__data.json', 6), at('/app/wines/1/__data.json', 9)];
+    expect(entriesToEvict(entries, 2)).toEqual([`${ORIGIN}/app/wines/2`, `${ORIGIN}/app/wines/2/__data.json`]);
+  });
+});
+
+describe('parseStoredAt', () => {
+  it('lit un nombre, sinon null', () => {
+    expect(parseStoredAt('1234')).toBe(1234);
+    expect(parseStoredAt(null)).toBeNull();
+    expect(parseStoredAt(undefined)).toBeNull();
+    expect(parseStoredAt('')).toBeNull();
+    expect(parseStoredAt('abc')).toBeNull();
+    expect(parseStoredAt('Infinity')).toBeNull();
+  });
+});
+
+describe('stampedHeaders', () => {
+  it('garde les en-têtes et ajoute x-apogee-stored-at', () => {
+    const h = stampedHeaders({ 'content-type': 'application/json' }, 1234);
+    expect(h.get('content-type')).toBe('application/json');
+    expect(h.get(STORED_AT_HEADER)).toBe('1234');
+    expect(STORED_AT_HEADER).toBe('x-apogee-stored-at');
+  });
+});
+
+describe('trimPageCache', () => {
+  class FakeCache {
+    entries = new Map<string, Response>();
+    put(key: string, res: Response) {
+      this.entries.set(key, res);
+    }
+    async keys() {
+      return [...this.entries.keys()].map((url) => new Request(url));
+    }
+    async match(req: Request, options?: CacheQueryOptions) {
+      expect(options).toEqual({ ignoreVary: true });
+      return this.entries.get(req.url);
+    }
+    async delete(req: Request) {
+      return this.entries.delete(req.url);
+    }
+  }
+  const stamp = (cache: FakeCache, path: string, now: number) =>
+    cache.put(`${ORIGIN}${path}`, new Response('x', { headers: stampedHeaders({}, now) }));
+
+  it('lit x-apogee-stored-at et supprime les plus anciennes', async () => {
+    const cache = new FakeCache();
+    stamp(cache, '/app/wines/3', 30);
+    stamp(cache, '/app/wines/1', 10);
+    stamp(cache, '/app/wines/2', 20);
+    await trimPageCache(cache, 2);
+    expect([...cache.entries.keys()]).toEqual([`${ORIGIN}/app/wines/3`, `${ORIGIN}/app/wines/2`]);
+  });
+
+  it('ne lit rien sous le plafond', async () => {
+    const cache = new FakeCache();
+    stamp(cache, '/app/wines/1', 10);
+    const match = vi.spyOn(cache, 'match');
+    await trimPageCache(cache, 2);
+    expect(match).not.toHaveBeenCalled();
+  });
+
+  it('ne lève jamais', async () => {
+    const broken = {
+      keys: async () => {
+        throw new Error('quota');
+      },
+      match: async () => undefined,
+      delete: async () => false
+    };
+    await expect(trimPageCache(broken)).resolves.toBeUndefined();
+  });
+
+  it('Review Focus : après 200 fiches consultées, /app et /app/__data.json sont toujours là, 120 entrées au plus', async () => {
+    const cache = new FakeCache();
+    stamp(cache, '/app', 1);
+    stamp(cache, '/app/__data.json', 2);
+    for (let i = 1; i <= 200; i++) {
+      stamp(cache, `/app/wines/${i}`, 100 + i);
+      await trimPageCache(cache);
+    }
+    const urls = [...cache.entries.keys()];
+    expect(urls.length).toBe(MAX_PAGE_ENTRIES);
+    expect(urls).toContain(`${ORIGIN}/app`);
+    expect(urls).toContain(`${ORIGIN}/app/__data.json`);
+    expect(urls).toContain(`${ORIGIN}/app/wines/200`);
+    expect(urls).not.toContain(`${ORIGIN}/app/wines/1`);
   });
 });
