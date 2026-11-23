@@ -221,8 +221,15 @@ function swOutcome(data: unknown): { userId: number; outcome: SyncOutcome } | nu
   const o = d.outcome;
   if (d.type !== 'sync-outcome' || typeof d.userId !== 'number' || !o) return null;
   if (!Array.isArray(o.results) || !Array.isArray(o.dropped) || typeof o.status !== 'string') return null;
-  // `undone` is missing from a service worker of an older version.
-  return { userId: d.userId, outcome: { ...(o as SyncOutcome), undone: Array.isArray(o.undone) ? o.undone : [] } };
+  // `undone` and `quarantined` are missing from a service worker of an older version.
+  return {
+    userId: d.userId,
+    outcome: {
+      ...(o as SyncOutcome),
+      undone: Array.isArray(o.undone) ? o.undone : [],
+      quarantined: Array.isArray(o.quarantined) ? o.quarantined : []
+    }
+  };
 }
 
 /**

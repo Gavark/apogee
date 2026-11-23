@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { BACKGROUND_RETRY_DELAYS_MS, runWithRetries, shouldRetry } from '$lib/offline/background-sync';
 import type { SyncOutcome, SyncStatus } from '$lib/offline/sync';
 
-const outcome = (status: SyncStatus): SyncOutcome => ({ sent: 0, results: [], dropped: [], undone: [], status });
+const outcome = (status: SyncStatus): SyncOutcome => ({ sent: 0, results: [], dropped: [], undone: [], quarantined: [], status });
 
 /** A syncOnce answering the given statuses in order (the last one repeats). */
 function script(...statuses: SyncStatus[]) {

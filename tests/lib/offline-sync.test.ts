@@ -1,8 +1,8 @@
 import 'fake-indexeddb/auto';
 import { IDBFactory } from 'fake-indexeddb';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { enqueue, listQueued, markUndo, _resetForTests } from '$lib/offline/queue';
-import { syncNow } from '$lib/offline/sync';
+import { enqueue, listQueued, markUndo, quarantine, strike, _resetForTests } from '$lib/offline/queue';
+import { MAX_STRIKES, postOps, serverReachable, syncNow } from '$lib/offline/sync';
 import type { OpResult, StockOp } from '$lib/server/stock';
 
 const adj = (opId: string, delta = 1): StockOp => ({ opId, kind: 'adjust', lotId: 1, delta });
@@ -293,5 +293,224 @@ describe('annulation différée (geste marqué undo dans la file)', () => {
     await fresh.syncNow(1, { fetch: s.fetch });
     expect(s.batches.map((b) => b.map((o) => o.kind))).toEqual([['consume'], ['unconsume']]);
     expect(s.batches[1][0]).toMatchObject({ consumptionId: 42 });
+  });
+});
+
+/**
+ * Like `server`, plus GET /healthz: answers 200 while `health.up`, else rejects (server unreachable).
+ * `health.probes` counts the /healthz calls.
+ */
+function serverWithHealth(answer: (ops: StockOp[]) => Response | Promise<Response>, up = true) {
+  const batches: Sent[] = [];
+  const health = { up, probes: 0 };
+  const fetch = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+    if (String(url) === '/healthz') {
+      health.probes++;
+      if (health.up) return new Response('ok');
+      throw new TypeError('Failed to fetch');
+    }
+    const { ops } = JSON.parse(String(init?.body)) as { ops: StockOp[] };
+    batches.push(ops);
+    return answer(ops);
+  });
+  return { fetch: fetch as unknown as typeof globalThis.fetch, batches, calls: fetch, health };
+}
+
+const ids = (batches: Sent[]) => batches.map((b) => b.map((o) => o.opId));
+const status500 = () => new Response('{}', { status: 500 });
+const review = (opId: string, consumeOpId: string): StockOp => ({ opId, kind: 'review', consumeOpId, verdict: 'right', note: null });
+/** Answers 500 to any batch holding `culprit`, applies the others. */
+const failsOn = (culprit: string) => (ops: StockOp[]) => (ops.some((o) => o.opId === culprit) ? status500() : allApplied(ops));
+
+describe('postOps et serverReachable', () => {
+  it('échec : answered vrai si une réponse HTTP est arrivée, faux pour une exception', async () => {
+    const answered = serverWithHealth(() => status500());
+    await expect(postOps([adj('a')], 1, answered.fetch)).resolves.toEqual({ kind: 'failed', answered: true });
+    const unreadable = serverWithHealth(() => new Response('pas du json'));
+    await expect(postOps([adj('a')], 1, unreadable.fetch)).resolves.toEqual({ kind: 'failed', answered: true });
+    const thrown = serverWithHealth(() => {
+      throw new TypeError('Failed to fetch');
+    });
+    await expect(postOps([adj('a')], 1, thrown.fetch)).resolves.toEqual({ kind: 'failed', answered: false });
+  });
+
+  it('serverReachable : GET /healthz sans cache ; vrai s’il répond (quel que soit le statut), faux sinon', async () => {
+    const up = vi.fn(async () => new Response('', { status: 503 }));
+    await expect(serverReachable(up as unknown as typeof fetch)).resolves.toBe(true);
+    expect(up).toHaveBeenCalledWith('/healthz', expect.objectContaining({ cache: 'no-store', credentials: 'same-origin' }));
+    const down = vi.fn(async () => {
+      throw new TypeError('Failed to fetch');
+    });
+    await expect(serverReachable(down as unknown as typeof fetch)).resolves.toBe(false);
+  });
+});
+
+describe('quarantaine des gestes en échec répété', () => {
+  it('MAX_STRIKES vaut 5', () => {
+    expect(MAX_STRIKES).toBe(5);
+  });
+
+  it('500 → coup sur la tête du lot, status retry', async () => {
+    await enqueue(1, adj('a'));
+    await enqueue(1, adj('b'));
+    const s = serverWithHealth(status500, false);
+    const out = await syncNow(1, { fetch: s.fetch });
+    expect(out.status).toBe('retry');
+    expect(out.quarantined).toEqual([]);
+    expect(s.health.probes).toBe(0); // an HTTP answer: the server is reachable
+    const q = await listQueued(1);
+    expect(q.map((x) => [x.op.opId, x.attempts, x.strikes])).toEqual([
+      ['a', 1, 1],
+      ['b', 1, undefined]
+    ]);
+  });
+
+  it('erreur réseau + /healthz répond → coup', async () => {
+    await enqueue(1, adj('a'));
+    const s = serverWithHealth(() => {
+      throw new TypeError('Failed to fetch');
+    }, true);
+    const out = await syncNow(1, { fetch: s.fetch });
+    expect(out.status).toBe('retry');
+    expect(s.health.probes).toBe(1);
+    expect((await listQueued(1))[0]).toMatchObject({ attempts: 1, strikes: 1 });
+  });
+
+  it('erreur réseau + /healthz échoue → aucun coup, attempts +1', async () => {
+    await enqueue(1, adj('a'));
+    const s = serverWithHealth(() => {
+      throw new TypeError('Failed to fetch');
+    }, false);
+    const out = await syncNow(1, { fetch: s.fetch });
+    expect(out.status).toBe('retry');
+    expect(s.health.probes).toBe(1);
+    const q = await listQueued(1);
+    expect(q[0].attempts).toBe(1);
+    expect(q[0].strikes).toBeUndefined();
+  });
+
+  it('navigator.onLine false → ni envoi ni coup', async () => {
+    vi.stubGlobal('navigator', { onLine: false });
+    await enqueue(1, adj('a'));
+    const s = serverWithHealth(status500);
+    const out = await syncNow(1, { fetch: s.fetch });
+    expect(out.status).toBe('offline');
+    expect(s.calls).not.toHaveBeenCalled();
+    const q = await listQueued(1);
+    expect(q[0].attempts).toBe(0);
+    expect(q[0].strikes).toBeUndefined();
+  });
+
+  it('lot [A, B, C], B fait 500 : coup sur A, puis A part seul et passe, puis [B, C] → coup sur B, B part seul ensuite', async () => {
+    for (const id of ['A', 'B', 'C']) await enqueue(1, adj(id));
+    const s1 = serverWithHealth(failsOn('B'));
+    await syncNow(1, { fetch: s1.fetch });
+    expect(ids(s1.batches)).toEqual([['A', 'B', 'C']]);
+    expect((await listQueued(1)).map((x) => x.strikes)).toEqual([1, undefined, undefined]);
+
+    const s2 = serverWithHealth(failsOn('B'));
+    const out2 = await syncNow(1, { fetch: s2.fetch });
+    expect(ids(s2.batches)).toEqual([['A'], ['B', 'C']]);
+    expect(out2).toMatchObject({ status: 'retry', sent: 1 });
+    expect((await listQueued(1)).map((x) => [x.op.opId, x.strikes])).toEqual([
+      ['B', 1],
+      ['C', undefined]
+    ]);
+
+    const s3 = serverWithHealth(failsOn('B'));
+    await syncNow(1, { fetch: s3.fetch });
+    expect(ids(s3.batches)).toEqual([['B']]);
+    expect((await listQueued(1)).map((x) => [x.op.opId, x.strikes])).toEqual([
+      ['B', 2],
+      ['C', undefined]
+    ]);
+  });
+
+  it('B échoue seul jusqu’à 5 coups → quarantaine, out.quarantined = [B], C envoyé dans la même synchro', async () => {
+    await enqueue(1, adj('B'));
+    await enqueue(1, adj('C'));
+    for (let i = 1; i < MAX_STRIKES; i++) {
+      const out = await syncNow(1, { fetch: serverWithHealth(failsOn('B')).fetch });
+      expect(out).toMatchObject({ status: 'retry', quarantined: [] });
+    }
+    expect((await listQueued(1)).map((x) => [x.op.opId, x.strikes])).toEqual([
+      ['B', 4],
+      ['C', undefined]
+    ]);
+
+    const s = serverWithHealth(failsOn('B'));
+    const out = await syncNow(1, { fetch: s.fetch });
+    expect(ids(s.batches)).toEqual([['B'], ['C']]);
+    expect(out).toMatchObject({ status: 'ok', sent: 1, quarantined: ['B'] });
+    expect(out.results.map((r) => r.opId)).toEqual(['C']);
+    const q = await listQueued(1);
+    expect(q).toHaveLength(1);
+    expect(q[0]).toMatchObject({ op: { opId: 'B' }, strikes: 5, attempts: 5 });
+    expect(q[0].quarantinedAt).toEqual(expect.any(Number));
+  });
+
+  it('consume en quarantaine + review qui le vise → le review n’est pas envoyé, reste en file', async () => {
+    await enqueue(1, consume('k'));
+    await enqueue(1, review('r', 'k'));
+    await enqueue(1, adj('x'));
+    for (let i = 1; i < MAX_STRIKES; i++) await strike('k');
+
+    // k goes alone, takes its 5th strike: the next pass holds r back and still sends x.
+    const s = serverWithHealth(failsOn('k'));
+    const out = await syncNow(1, { fetch: s.fetch });
+    expect(ids(s.batches)).toEqual([['k'], ['x']]);
+    expect(out.quarantined).toEqual(['k']);
+    expect((await listQueued(1)).map((x) => x.op.opId)).toEqual(['k', 'r']);
+
+    // Already quarantined (and a verdict added since): neither review is sent.
+    await enqueue(1, review('r2', 'k'));
+    await enqueue(1, adj('y'));
+    const s2 = serverWithHealth(allApplied);
+    await syncNow(1, { fetch: s2.fetch });
+    expect(ids(s2.batches)).toEqual([['y']]);
+    expect((await listQueued(1)).map((x) => x.op.opId)).toEqual(['k', 'r', 'r2']);
+  });
+
+  it('geste en quarantaine jamais renvoyé aux synchros suivantes', async () => {
+    await enqueue(1, adj('a'));
+    await quarantine('a');
+    const s = serverWithHealth(allApplied);
+    for (let i = 0; i < 3; i++) {
+      const out = await syncNow(1, { fetch: s.fetch });
+      expect(out).toMatchObject({ status: 'idle', sent: 0, quarantined: [] });
+    }
+    expect(s.calls).not.toHaveBeenCalled();
+    expect((await listQueued(1)).map((x) => x.op.opId)).toEqual(['a']);
+  });
+
+  it('400 et rejected : inchangés, aucun coup', async () => {
+    await enqueue(1, adj('bad'));
+    for (let i = 1; i < MAX_STRIKES; i++) await strike('bad'); // one more strike would quarantine it
+    const s400 = serverWithHealth(() => new Response('{"error":"invalid"}', { status: 400 }));
+    const dropped = await syncNow(1, { fetch: s400.fetch });
+    expect(dropped).toMatchObject({ status: 'ok', quarantined: [] });
+    expect(dropped.dropped.map((o) => o.opId)).toEqual(['bad']);
+    expect(s400.health.probes).toBe(0);
+    expect(await listQueued(1)).toEqual([]);
+
+    await enqueue(1, consume('no'));
+    for (let i = 1; i < MAX_STRIKES; i++) await strike('no');
+    const sRej = serverWithHealth((ops) =>
+      ok(ops.map((o) => ({ opId: o.opId, status: 'rejected' as const, reason: 'empty_lot' as const })))
+    );
+    const rejected = await syncNow(1, { fetch: sRej.fetch });
+    expect(rejected).toMatchObject({ status: 'ok', quarantined: [] });
+    expect(rejected.results).toEqual([{ opId: 'no', status: 'rejected', reason: 'empty_lot' }]);
+    expect(sRej.health.probes).toBe(0);
+    expect(await listQueued(1)).toEqual([]);
+  });
+
+  it('réponse 200 au corps illisible → answered, coup sans sonde /healthz', async () => {
+    await enqueue(1, adj('a'));
+    const s = serverWithHealth(() => new Response('<html>proxy</html>'), false);
+    const out = await syncNow(1, { fetch: s.fetch });
+    expect(out.status).toBe('retry');
+    expect(s.health.probes).toBe(0);
+    expect((await listQueued(1))[0]).toMatchObject({ attempts: 1, strikes: 1 });
   });
 });
