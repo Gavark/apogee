@@ -3,9 +3,11 @@
   import * as m from '$paraglide/messages';
   import Button from '$lib/components/Button.svelte';
   import Sheet from '$lib/components/Sheet.svelte';
-  import { reload } from '$lib/offline/pending.svelte';
+  import { reload, resultFor } from '$lib/offline/pending.svelte';
   import { newOpId, sendStockOps, SessionExpiredError, undoGesture } from '$lib/stock-client';
   import { showToast } from '$lib/toast.svelte';
+  import { reviewRefAfterDrink } from '$lib/verdict';
+  import { askVerdict } from '$lib/verdict-sheet.svelte';
   import { wineTitle } from '$lib/wine-labels';
   import type { CellarLot, CellarRow } from '$lib/server/wines';
   import type { StockOp } from '$lib/server/stock';
@@ -37,11 +39,24 @@
       // The undo uses no component state: the toast outlives this button
       // (a finished wine leaves the list, and the button with it).
       const undo = { label: m.wine_toast_undo(), run: () => void undoGesture(op) };
-      if (r.status === 'queued') {
-        queued = true;
-        showToast(m.offline_saved(), undo);
-      } else if (r.status === 'applied' && r.consumptionId !== undefined) {
-        showToast(m.drink_toast({ wine: wineTitle(row.wine) }), undo);
+      queued = r.status === 'queued';
+      const ref = reviewRefAfterDrink(op, r);
+      if (ref) {
+        const message = queued ? m.offline_saved() : m.drink_toast({ wine: wineTitle(row.wine) });
+        // The verdict sheet is a modal <dialog>: a toast shown now would be inert behind it,
+        // so the toast (with its undo) waits for the sheet to close.
+        askVerdict({
+          title: `${wineTitle(row.wine)} ${row.wine.vintage ?? m.wine_nv()}`,
+          ref,
+          verdict: null,
+          note: null,
+          onclosed: () => {
+            // The sheet may stay open a while: the server can have rejected the queued consume since.
+            const late = queued ? resultFor(op.opId) : undefined;
+            if (late?.status === 'rejected') showToast(late.reason === 'empty_lot' ? m.drink_empty_lot() : m.wine_err_op());
+            else showToast(message, undo);
+          }
+        });
       } else if (r.status === 'rejected') {
         showToast(r.reason === 'empty_lot' ? m.drink_empty_lot() : m.wine_err_op());
       }

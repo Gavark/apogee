@@ -158,6 +158,27 @@ describe('sendStockOps via la file', () => {
     expect(pendingOps()).toEqual([]); // applied one cleared by the reload, rejected one at once
   });
 
+  it('verdict rejeté not_found (« Bue » annulé entre-temps) → file vidée, aucun message d’échec', async () => {
+    offline();
+    const review: StockOp = { opId: 'rv-1', kind: 'review', consumeOpId: 'gone', verdict: 'late', note: null };
+    await sendStockOps([review]);
+    serve((o) => ({ opId: o.opId, status: 'rejected', reason: 'not_found' }));
+    await syncPending(1);
+    expect(toast.current).toBeNull();
+    expect(invalidateAll).toHaveBeenCalled();
+    expect(await listQueued(1)).toEqual([]);
+    expect(pendingOps()).toEqual([]);
+  });
+
+  it('en contrôle : un « Bue » rejeté not_found reste signalé', async () => {
+    offline();
+    await sendStockOps([consume('c-1')]);
+    serve((o) => ({ opId: o.opId, status: 'rejected', reason: 'not_found' }));
+    await syncPending(1);
+    expect(toast.current?.message).toBe(m.offline_op_failed());
+    expect(await listQueued(1)).toEqual([]);
+  });
+
   it('opération refusée par le serveur (400) → retirée et signalée', async () => {
     offline();
     await sendStockOps([op]);

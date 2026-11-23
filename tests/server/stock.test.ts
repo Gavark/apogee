@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { eq } from 'drizzle-orm';
 import { makeTestDb } from '../helpers/db';
 import { makeHousehold, makeUser, makeLocation } from '../helpers/fixtures';
-import { applyStockOps, parseStockOps, type StockOp } from '../../src/lib/server/stock';
+import { applyStockOps, parseStockOps, MAX_NOTE_LEN, type StockOp } from '../../src/lib/server/stock';
 import type { HouseholdCtx } from '../../src/lib/server/context';
 import { POST } from '../../src/routes/api/stock/ops/+server';
 
@@ -264,6 +264,78 @@ describe('stock ops', () => {
     expect(ops()[0].opId).toBe('11111111-1111-4111-8111-11111111abcd');
   });
 
+  describe('review', () => {
+    type Verdict = 'early' | 'right' | 'late';
+    const review = (target: { consumptionId?: number; consumeOpId?: string }, verdict: Verdict, note: string | null, opId = uuid()): StockOp => ({
+      opId,
+      kind: 'review',
+      ...target,
+      verdict,
+      note
+    });
+    const row = (id: number) => tdb.db.select().from(s().consumptions).where(eq(s().consumptions.id, id)).get();
+
+    it('par consumptionId : enregistre verdict et note', () => {
+      const { lotId } = addLot(ctx.householdId, locA, 2);
+      const [c] = applyStockOps(tdb.db, ctx, [consume(lotId)]);
+      const [r] = applyStockOps(tdb.db, ctx, [review({ consumptionId: c.consumptionId }, 'right', 'nickel')]);
+      expect(r).toMatchObject({ status: 'applied', consumptionId: c.consumptionId });
+      expect(row(c.consumptionId!)).toMatchObject({ verdict: 'right', note: 'nickel' });
+    });
+
+    it('un second review remplace verdict et note', () => {
+      const { lotId } = addLot(ctx.householdId, locA, 2);
+      const [c] = applyStockOps(tdb.db, ctx, [consume(lotId)]);
+      applyStockOps(tdb.db, ctx, [review({ consumptionId: c.consumptionId }, 'right', 'nickel')]);
+      applyStockOps(tdb.db, ctx, [review({ consumptionId: c.consumptionId }, 'late', null)]);
+      expect(row(c.consumptionId!)).toMatchObject({ verdict: 'late', note: null });
+    });
+
+    it('consume puis review par consumeOpId dans le même appel : vise la consommation créée', () => {
+      const { lotId } = addLot(ctx.householdId, locA, 2);
+      const c = consume(lotId);
+      const [rc, rr] = applyStockOps(tdb.db, ctx, [c, review({ consumeOpId: c.opId }, 'early', null)]);
+      expect(rr).toMatchObject({ status: 'applied', consumptionId: rc.consumptionId });
+      expect(row(rc.consumptionId!)?.verdict).toBe('early');
+    });
+
+    it('consume, unconsume puis review par consumeOpId → not_found', () => {
+      const { lotId } = addLot(ctx.householdId, locA, 2);
+      const c = consume(lotId);
+      const [rc] = applyStockOps(tdb.db, ctx, [c]);
+      applyStockOps(tdb.db, ctx, [{ opId: uuid(), kind: 'unconsume', consumptionId: rc.consumptionId! }]);
+      const [r] = applyStockOps(tdb.db, ctx, [review({ consumeOpId: c.opId }, 'right', null)]);
+      expect(r).toMatchObject({ status: 'rejected', reason: 'not_found' });
+    });
+
+    it('consommation d’un autre foyer (par id, puis par consumeOpId) → not_found, rien modifié', () => {
+      const { lotId } = addLot(otherCtx.householdId, locB, 2);
+      const c = consume(lotId);
+      const [rc] = applyStockOps(tdb.db, otherCtx, [c]);
+      const [byId] = applyStockOps(tdb.db, ctx, [review({ consumptionId: rc.consumptionId }, 'late', 'x')]);
+      expect(byId).toMatchObject({ status: 'rejected', reason: 'not_found' });
+      const [byOp] = applyStockOps(tdb.db, ctx, [review({ consumeOpId: c.opId }, 'late', 'x')]);
+      expect(byOp).toMatchObject({ status: 'rejected', reason: 'not_found' });
+      expect(row(rc.consumptionId!)?.verdict).toBeNull();
+    });
+
+    it('consumeOpId inconnu → not_found', () => {
+      const [r] = applyStockOps(tdb.db, ctx, [review({ consumeOpId: uuid() }, 'right', null)]);
+      expect(r).toMatchObject({ status: 'rejected', reason: 'not_found' });
+    });
+
+    it('rejouer le même review (même opId) renvoie le résultat stocké sans réécrire', () => {
+      const { lotId } = addLot(ctx.householdId, locA, 2);
+      const [c] = applyStockOps(tdb.db, ctx, [consume(lotId)]);
+      const first = review({ consumptionId: c.consumptionId }, 'right', 'a');
+      const [r1] = applyStockOps(tdb.db, ctx, [first]);
+      applyStockOps(tdb.db, ctx, [review({ consumptionId: c.consumptionId }, 'late', 'b')]);
+      const [r2] = applyStockOps(tdb.db, ctx, [first]);
+      expect(r2).toEqual(r1);
+      expect(row(c.consumptionId!)).toMatchObject({ verdict: 'late', note: 'b' });
+    });
+  });
+
   describe('parseStockOps', () => {
     const good = { opId: '11111111-1111-4111-8111-111111111111', kind: 'adjust', lotId: 1, delta: 1 };
     it('accepte des ops valides de chaque type', () => {
@@ -326,6 +398,37 @@ describe('stock ops', () => {
       const consume = { opId: id, kind: 'consume', lotId: 1, consumedOn: '2026-11-19' };
       ok({ ...consume, note: 'x'.repeat(2000) });
       bad({ ...consume, note: 'x'.repeat(2001) });
+    });
+    describe('review', () => {
+      const id = '11111111-1111-4111-8111-111111111115';
+      const base = { opId: id, kind: 'review', verdict: 'right' };
+      const parse = (op: unknown) => parseStockOps({ ops: [op] });
+      const bad = (op: unknown) => expect(parse(op).ok).toBe(false);
+      it('accepte une cible par consumptionId, note absente → null', () => {
+        const r = parse({ ...base, consumptionId: 3, note: null });
+        expect(r.ok && r.ops[0]).toEqual({ opId: id, kind: 'review', consumptionId: 3, verdict: 'right', note: null });
+        const r2 = parse({ ...base, consumptionId: 3 });
+        expect(r2.ok && r2.ops[0]).toMatchObject({ note: null });
+      });
+      it('accepte consumeOpId en majuscules et le rend en minuscules', () => {
+        const r = parse({ ...base, consumeOpId: '11111111-1111-4111-8111-11111111ABCD' });
+        expect(r.ok && r.ops[0]).toMatchObject({ consumeOpId: '11111111-1111-4111-8111-11111111abcd' });
+      });
+      it('rogne la note, une note blanche devient null', () => {
+        const r = parse({ ...base, consumptionId: 3, note: '  bien  ' });
+        expect(r.ok && r.ops[0]).toMatchObject({ note: 'bien' });
+        const r2 = parse({ ...base, consumptionId: 3, note: '   ' });
+        expect(r2.ok && r2.ops[0]).toMatchObject({ note: null });
+      });
+      it('refuse : aucune cible, deux cibles, verdict inconnu, consumeOpId non UUID, note trop longue, id 0', () => {
+        bad(base);
+        bad({ ...base, consumptionId: 3, consumeOpId: '11111111-1111-4111-8111-111111111116' });
+        bad({ ...base, consumptionId: 3, verdict: 'good' });
+        bad({ ...base, consumeOpId: 'abc' });
+        bad({ ...base, consumeOpId: '11111111-1111-1111-8111-111111111116' });
+        bad({ ...base, consumptionId: 3, note: 'x'.repeat(MAX_NOTE_LEN + 1) });
+        bad({ ...base, consumptionId: 0 });
+      });
     });
     it('toPosition est rogné et opId passé en minuscules', () => {
       const r = parseStockOps({

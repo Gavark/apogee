@@ -529,6 +529,16 @@ describe('wines (db)', () => {
     expect(d.consumptions[1]).toMatchObject({ rating: 4, note: 'n', userEmail: 'a@x.fr', locationName: 'Cave' });
     expect(d.consumptions[0]).toMatchObject({ userEmail: null });
   });
+
+  it('getWineDetail : verdict de chaque consommation, null quand absent', () => {
+    const { wineId, lotId } = createWine(tdb.db, ctx, wine({ window: win(2020, 2030) }), lot({ quantity: 2 }));
+    const ins = (consumedOn: string, verdict: 'early' | null) =>
+      tdb.db.insert(tdb.schema.consumptions).values({ wineId, lotId, locationId: loc, consumedOn, verdict }).run();
+    ins('2025-05-01', 'early');
+    ins('2026-02-01', null);
+    const d = getWineDetail(tdb.db, ctx, wineId, 2026);
+    expect(d.consumptions.map((c) => c.verdict)).toEqual([null, 'early']);
+  });
 });
 
 describe('homeSections', () => {

@@ -4,7 +4,7 @@ import * as schema from './db/schema';
 import type { HouseholdCtx } from './context';
 import { currentYear } from '../phase';
 import { householdReferenceTimeZone, markCurrentPhaseSilently } from './notifications/phases';
-import type { OpResult, StockOp } from '../stock-ops';
+import { VERDICTS, type OpResult, type StockOp, type Verdict } from '../stock-ops';
 
 type DB = BaseSQLiteDatabase<'sync', unknown, typeof schema>;
 
@@ -69,6 +69,18 @@ function parseOp(raw: unknown): StockOp | null {
       const { consumptionId } = raw;
       if (!isId(consumptionId)) return null;
       return { opId: id, kind, consumptionId };
+    }
+    case 'review': {
+      const { consumptionId, consumeOpId, verdict, note } = raw;
+      if (!VERDICTS.includes(verdict as Verdict)) return null;
+      // Exactly one target: a consumption id, or the opId of the 'consume' that created it.
+      if ((consumptionId == null) === (consumeOpId == null)) return null;
+      if (note != null && (typeof note !== 'string' || note.length > MAX_NOTE_LEN)) return null;
+      const trimmed = typeof note === 'string' ? note.trim() : '';
+      const base = { opId: id, kind, verdict: verdict as Verdict, note: trimmed === '' ? null : trimmed };
+      if (consumptionId != null) return isId(consumptionId) ? { ...base, consumptionId } : null;
+      if (typeof consumeOpId !== 'string' || !UUID_V4.test(consumeOpId)) return null;
+      return { ...base, consumeOpId: consumeOpId.toLowerCase() };
     }
     default:
       return null;
@@ -207,6 +219,32 @@ function unconsume(db: DB, ctx: HouseholdCtx, op: Extract<StockOp, { kind: 'unco
   return { opId: op.opId, status: 'applied', consumptionId: c.id };
 }
 
+/** Records how a drunk bottle turned out; a later review replaces the earlier verdict and note. */
+function review(db: DB, ctx: HouseholdCtx, op: Extract<StockOp, { kind: 'review' }>): OpResult {
+  let consumptionId = op.consumptionId;
+  if (op.consumeOpId !== undefined) {
+    // The consume may have been applied earlier in this very batch: its result is in applied_ops by now.
+    const prior = db
+      .select({ result: appliedOps.result })
+      .from(appliedOps)
+      .where(and(eq(appliedOps.opId, op.consumeOpId), eq(appliedOps.householdId, ctx.householdId)))
+      .get();
+    const result = prior ? (JSON.parse(prior.result) as OpResult) : undefined;
+    if (result?.status !== 'applied' || result.consumptionId === undefined) return rejected(op.opId, 'not_found');
+    consumptionId = result.consumptionId;
+  }
+  if (consumptionId === undefined) return rejected(op.opId, 'not_found');
+  const c = db
+    .select({ id: consumptions.id })
+    .from(consumptions)
+    .innerJoin(wines, eq(wines.id, consumptions.wineId))
+    .where(and(eq(consumptions.id, consumptionId), eq(wines.householdId, ctx.householdId)))
+    .get();
+  if (!c) return rejected(op.opId, 'not_found');
+  db.update(consumptions).set({ verdict: op.verdict, note: op.note }).where(eq(consumptions.id, c.id)).run();
+  return { opId: op.opId, status: 'applied', consumptionId: c.id };
+}
+
 function applyOne(db: DB, ctx: HouseholdCtx, op: StockOp): OpResult {
   switch (op.kind) {
     case 'consume':
@@ -217,6 +255,8 @@ function applyOne(db: DB, ctx: HouseholdCtx, op: StockOp): OpResult {
       return move(db, ctx, op);
     case 'unconsume':
       return unconsume(db, ctx, op);
+    case 'review':
+      return review(db, ctx, op);
   }
 }
 
