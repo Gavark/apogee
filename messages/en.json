@@ -629,5 +629,13 @@
   "notif_test_sent": "Test notification sent.",
   "notif_test_no_device": "No subscribed device: enable notifications first.",
   "notif_test_failed": "Sending failed. Try again in a moment.",
-  "notif_test_limit": "Limit reached: 3 test notifications per hour."
+  "notif_test_limit": "Limit reached: 3 test notifications per hour.",
+  "verdict_question": "Opened at the right time?",
+  "verdict_early": "Too early",
+  "verdict_right": "Just right",
+  "verdict_late": "Too late",
+  "verdict_note_label": "Note (optional)",
+  "verdict_later": "Later",
+  "wine_history_verdict_add": "Add a verdict",
+  "wine_history_verdict_edit": "Change the verdict"
 }

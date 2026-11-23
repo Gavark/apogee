@@ -6,6 +6,7 @@
   import OfflineBanner from '$lib/components/OfflineBanner.svelte';
   import ThemeToggle from '$lib/components/ThemeToggle.svelte';
   import Toast from '$lib/components/Toast.svelte';
+  import VerdictSheet from '$lib/components/VerdictSheet.svelte';
 
   let { children, data } = $props();
 </script>
@@ -30,6 +31,7 @@
 </main>
 
 <Toast />
+{#if data.user}<VerdictSheet />{/if}
 
 <style>
   .public-topbar {
