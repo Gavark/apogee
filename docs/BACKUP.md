@@ -108,7 +108,7 @@ Si Docker tourne sur une machine Windows, la copie hors machine la plus simple e
 Commencez par voir ce qu'il ferait :
 
 ```powershell
-powershell -File scripts\sync-backups-offsite.ps1 -Destination 'G:\Mon Drive\Perso\Backup\Apogee' -DryRun
+powershell -File scripts\sync-backups-offsite.ps1 -Destination 'G:\Mon Drive\Sauvegardes\Apogee' -DryRun
 ```
 
 Puis enregistrez une tâche quotidienne (depuis le dossier du dépôt ; la source est passée explicitement avec `-Source`, pour que la tâche pointe toujours vers les sauvegardes de ce déploiement) :
@@ -116,7 +116,7 @@ Puis enregistrez une tâche quotidienne (depuis le dossier du dépôt ; la sourc
 ```powershell
 $repo   = (Get-Location).Path
 $script = Join-Path $repo 'scripts\sync-backups-offsite.ps1'
-$dest   = 'G:\Mon Drive\Perso\Backup\Apogee'
+$dest   = 'G:\Mon Drive\Sauvegardes\Apogee'
 $action = New-ScheduledTaskAction -Execute 'powershell.exe' `
   -Argument "-NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$script`" -Destination `"$dest`" -Source `"$repo\backups`""
 $trigger  = New-ScheduledTaskTrigger -Daily -At '23:15'
