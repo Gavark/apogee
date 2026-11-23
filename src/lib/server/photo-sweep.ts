@@ -81,9 +81,13 @@ export function sweepOrphanPhotos(db: DB, dir: string, now: Date): SweepResult {
         continue;
       }
       rmSync(full, { force: true });
-      db.update(labelAnalyses).set({ photoPath: null }).where(eq(labelAnalyses.photoPath, rel)).run();
       result.removed.push(rel);
       console.log(`[photos] orphan removed: ${rel}`);
+      try {
+        db.update(labelAnalyses).set({ photoPath: null }).where(eq(labelAnalyses.photoPath, rel)).run();
+      } catch (e) {
+        console.error('[photos] sweep could not clear analyses:', errCode(e));
+      }
     } catch (e) {
       console.error('[photos] sweep failed on a file:', errCode(e));
     }

@@ -9,6 +9,20 @@ import { makeHousehold, makeUser, makeLocation } from '../helpers/fixtures';
 import { createWine, type WineInput } from '../../src/lib/server/wines';
 import { sweepOrphanPhotos, PHOTO_GRACE_MS } from '../../src/lib/server/photo-sweep';
 
+const fsFail = vi.hoisted(() => ({ on: null as string | null }));
+vi.mock('node:fs', async (orig) => {
+  const actual = await orig<typeof import('node:fs')>();
+  return {
+    ...actual,
+    rmSync: (path: string, opts?: Parameters<typeof actual.rmSync>[1]) => {
+      if (fsFail.on && String(path).includes(fsFail.on)) {
+        throw Object.assign(new Error(`EACCES: ${path}`), { code: 'EACCES' });
+      }
+      return actual.rmSync(path, opts);
+    }
+  };
+});
+
 const NOW = new Date('2026-11-23T15:00:00Z');
 const NOW_SEC = Math.floor(NOW.getTime() / 1000);
 const DAY = 24 * 3600;
@@ -29,6 +43,7 @@ beforeEach(() => {
   error = vi.spyOn(console, 'error').mockImplementation(() => {});
 });
 afterEach(() => {
+  fsFail.on = null;
   vi.restoreAllMocks();
   rmSync(dir, { recursive: true, force: true });
 });
@@ -94,6 +109,7 @@ describe('sweepOrphanPhotos', () => {
     mkWine(p);
     const r = sweepOrphanPhotos(tdb.db, dir, NOW);
     expect(r.removed).toEqual([]);
+    expect(r.keptRecent).toBe(0);
     expect(existsSync(join(dir, p))).toBe(true);
   });
 
@@ -129,9 +145,11 @@ describe('sweepOrphanPhotos', () => {
     put(orphan, 30);
     mkWine(wine);
     const id = mkAnalysis(orphan, NOW_SEC - 20 * DAY);
+    const otherId = mkAnalysis(wine, NOW_SEC - 20 * DAY);
     const r = sweepOrphanPhotos(tdb.db, dir, NOW);
     expect(r.removed).toEqual([orphan]);
     expect(analysisPath(id)).toBeNull();
+    expect(analysisPath(otherId)).toBe(wine);
   });
 
   it('ignore ce qui ne ressemble pas à une photo stockée', () => {
@@ -171,14 +189,48 @@ describe('sweepOrphanPhotos', () => {
     expect(existsSync(join(dir, gone))).toBe(false);
   });
 
-  it('ne laisse pas une erreur sur un fichier arrêter le ménage', () => {
+  it('ignore un dossier nommé comme une photo, sans erreur', () => {
     const wine = uuidPath();
     put(wine, 30);
     mkWine(wine);
-    // A directory named like a photo is not a file: ignored, never an error.
     mkdirSync(join(dir, '1', `${randomUUID()}.jpg`), { recursive: true });
     const r = sweepOrphanPhotos(tdb.db, dir, NOW);
     expect(r.removed).toEqual([]);
     expect(error).not.toHaveBeenCalled();
+  });
+
+  it("une erreur de suppression sur un fichier n'arrête pas le ménage et ne journalise que le code", () => {
+    const wine = uuidPath();
+    const bad = uuidPath();
+    const good = uuidPath();
+    put(wine, 30);
+    put(bad, 30);
+    put(good, 30);
+    mkWine(wine);
+    fsFail.on = bad.split('/')[1];
+    const r = sweepOrphanPhotos(tdb.db, dir, NOW);
+    expect(r.removed).toEqual([good]);
+    expect(existsSync(join(dir, bad))).toBe(true);
+    expect(existsSync(join(dir, good))).toBe(false);
+    expect(error).toHaveBeenCalledTimes(1);
+    expect(error).toHaveBeenCalledWith('[photos] sweep failed on a file:', 'EACCES');
+    expect(JSON.stringify(error.mock.calls)).not.toContain(bad.split('/')[1]);
+  });
+
+  it("garde la photo comme supprimée même si l'effacement de photo_path échoue", () => {
+    const wine = uuidPath();
+    const orphan = uuidPath();
+    put(wine, 30);
+    put(orphan, 30);
+    mkWine(wine);
+    mkAnalysis(orphan, NOW_SEC - 20 * DAY);
+    tdb.sqlite.exec(
+      "CREATE TRIGGER no_clear BEFORE UPDATE ON label_analyses BEGIN SELECT RAISE(ABORT, 'nope'); END"
+    );
+    const r = sweepOrphanPhotos(tdb.db, dir, NOW);
+    expect(r.removed).toEqual([orphan]);
+    expect(existsSync(join(dir, orphan))).toBe(false);
+    expect(log).toHaveBeenCalledWith(`[photos] orphan removed: ${orphan}`);
+    expect(error).toHaveBeenCalledWith('[photos] sweep could not clear analyses:', expect.any(String));
   });
 });
