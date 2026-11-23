@@ -5,6 +5,7 @@ import { version } from '$app/env';
 import { safeNotificationUrl } from '../lib/push-url';
 import {
   PAGE_CACHE,
+  STORED_AT_HEADER,
   cacheKeyFor,
   dataBodyToServe,
   dataBodyToStore,
@@ -14,7 +15,10 @@ import {
   isStorable,
   networkDeadlineFor,
   networkOrCopy,
-  offlineRedirectFor
+  offlineRedirectFor,
+  parseStoredAt,
+  stampedHeaders,
+  trimPageCache
 } from '../lib/offline/page-cache';
 import { getActiveUser } from '../lib/offline/queue';
 import { syncNow } from '../lib/offline/sync';
@@ -60,30 +64,33 @@ self.addEventListener('activate', (event) => {
       for (const key of await caches.keys()) {
         if (key !== CACHE && key !== PAGE_CACHE) await caches.delete(key);
       }
-      const stale = await dropCachedHtml().catch((): URL[] => []);
+      const stale = await dropCachedHtml().catch((): { url: URL; storedAt: number | null }[] => []);
       await self.clients.claim();
       // Best effort, outside waitUntil: fetches wait for the activation to finish.
-      for (const url of stale) void refetch(url);
+      for (const { url, storedAt } of stale) void refetch(url, storedAt);
     })()
   );
 });
 
-async function dropCachedHtml(): Promise<URL[]> {
+/** The dropped HTML copies, with when each was stored: a deploy must not reorder the visits. */
+async function dropCachedHtml(): Promise<{ url: URL; storedAt: number | null }[]> {
   const cache = await caches.open(PAGE_CACHE);
-  const urls: URL[] = [];
+  const urls: { url: URL; storedAt: number | null }[] = [];
   for (const req of await cache.keys()) {
     const url = new URL(req.url);
     if (isDataRequest(url)) continue; // version-independent: dataBodyToServe checks the node count
+    const hit = await cache.match(req, { ignoreVary: true });
+    const storedAt = parseStoredAt(hit?.headers.get(STORED_AT_HEADER));
     await cache.delete(req);
-    urls.push(url);
+    urls.push({ url, storedAt });
   }
   return urls;
 }
 
-async function refetch(url: URL): Promise<void> {
+async function refetch(url: URL, storedAt: number | null): Promise<void> {
   try {
     const res = await fetch(url, { credentials: 'same-origin' });
-    if (isStorable(res)) await store(url, res);
+    if (isStorable(res)) await store(url, res, storedAt ?? 0); // unstamped (pre-upgrade) page stays the oldest
   } catch {
     // offline or logged out: cached again on the next visit
   }
@@ -134,17 +141,26 @@ async function networkFirst(event: FetchEvent, url: URL): Promise<Response> {
   return networkOrCopy(network, copy, networkDeadlineFor(event.request));
 }
 
-async function store(url: URL, res: Response): Promise<void> {
+async function store(url: URL, res: Response, storedAt: number | null = null): Promise<void> {
   const cache = await caches.open(PAGE_CACHE);
   const key = pageKey(url);
   if (!isDataRequest(url)) {
-    if (res.headers.get('content-type')?.includes('text/html')) await cache.put(key, res);
+    if (res.headers.get('content-type')?.includes('text/html')) {
+      const stamped = new Response(res.body, {
+        status: res.status,
+        statusText: res.statusText,
+        headers: stampedHeaders(res.headers, storedAt ?? Date.now())
+      });
+      await cache.put(key, stamped);
+      await trimPageCache(cache);
+    }
     return;
   }
   const previous = await cache.match(key, { ignoreVary: true });
   const body = dataBodyToStore(await res.text(), previous ? await previous.text() : null);
   if (body === null) return; // a redirect in disguise ({ type: 'redirect' }), an error or a stream
-  await cache.put(key, new Response(body, { headers: { 'content-type': 'application/json' } }));
+  await cache.put(key, new Response(body, { headers: stampedHeaders({ 'content-type': 'application/json' }, Date.now()) }));
+  await trimPageCache(cache);
 }
 
 async function fromCache(url: URL): Promise<Response | null> {

@@ -639,7 +639,7 @@
   "notif_pref_phases_hint": "Un vin entre dans sa fenêtre de dégustation, atteint son apogée, passe à boire vite ou est passé.",
   "notif_pref_monthly": "Rappel mensuel",
   "notif_pref_monthly_hint": "Chaque mois, les bouteilles à ne pas oublier.",
-  "notif_schedule_hint": "Au plus une notification par jour, vers 18 h (fuseau horaire de votre compte : {timezone}).",
+  "notif_schedule_hint": "Au plus une notification par jour, vers 18 h, à l'heure de votre compte ({timezone}).",
   "notif_saved": "Préférences enregistrées.",
   "notif_this_device_title": "Cet appareil",
   "notif_btn_enable": "Activer les notifications",
@@ -675,5 +675,14 @@
   "phase_hint_peak": "Le meilleur moment pour l'ouvrir.",
   "phase_hint_ready": "Bon à boire, il peut encore progresser.",
   "phase_hint_too_young": "Trop jeune : il s'ouvre à partir de l'année indiquée.",
-  "phase_hint_unknown": "Pas encore de fenêtre : saisissez-la ou demandez une estimation à l'IA."
+  "phase_hint_unknown": "Pas encore de fenêtre : saisissez-la ou demandez une estimation à l'IA.",
+  "account_timezone_title": "Fuseau horaire",
+  "account_timezone_label": "Fuseau horaire du compte",
+  "account_timezone_hint": "Choisissez celui de l'endroit où vous vivez : il fixe l'heure du résumé quotidien (vers 18 h) et le jour où l'année change pour les phases.",
+  "account_timezone_submit": "Enregistrer le fuseau",
+  "account_timezone_success": "Fuseau horaire enregistré : {timezone}.",
+  "account_timezone_invalid": "Ce fuseau horaire est inconnu.",
+  "account_timezone_device": "Cet appareil est à l'heure de {timezone}.",
+  "account_timezone_use_device": "Utiliser ce fuseau",
+  "notif_schedule_change": "Changer de fuseau horaire"
 }

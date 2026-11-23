@@ -5,6 +5,7 @@ import { makeHousehold, makeUser, makeLocation } from '../../helpers/fixtures';
 import { registerSubscription } from '../../../src/lib/server/push/subscribe';
 import type { PushSender } from '../../../src/lib/server/push/send';
 import { runNotificationTick } from '../../../src/lib/server/notifications/tick';
+import { changeTimezone } from '../../../src/routes/account/_logic';
 
 let tdb: ReturnType<typeof makeTestDb>;
 let hh: number;
@@ -160,7 +161,7 @@ describe('runNotificationTick', () => {
     member('Europe/Paris', 'a', { notifyMonthly: 0 });
     prime('2026-12-31');
     crossing();
-    const slow: PushSender = async (sub, payload) => {
+    const slow: PushSender = async (sub, payload, vapid) => {
       await new Promise((r) => setTimeout(r, 30));
       return sender(sub, payload, undefined as never);
     };
@@ -207,5 +208,53 @@ describe('runNotificationTick', () => {
     expect(await tick('2027-01-06T17:00:00Z')).toEqual({ processed: 1, sent: 1 });
     expect(pushes).toHaveLength(1);
     expect(pushes[0].body).toContain('Ce mois-ci, 1 bouteille');
+  });
+});
+
+// November 2026: Paris = UTC+1, Guadeloupe = UTC-4, Auckland = UTC+13, Honolulu = UTC-10.
+describe('changement de fuseau du compte', () => {
+  const claims = async (now: string) => (await tick(now)).processed;
+
+  it('Paris → Guadeloupe (le cas réel) : pas de second résumé le même jour, celui du lendemain arrive à 18 h', async () => {
+    const a = member('Europe/Paris', 'a');
+    expect(await claims('2026-11-23T17:00:00Z')).toBe(1); // 18:00 Paris = 13:00 Guadeloupe
+    expect(changeTimezone(tdb.db, a, 'America/Guadeloupe')).toMatchObject({ ok: true, changed: true });
+    expect(await claims('2026-11-23T22:00:00Z')).toBe(0); // 18:00 Guadeloupe, already served today
+    expect(await claims('2026-11-24T17:00:00Z')).toBe(0); // 13:00 Guadeloupe: too early
+    expect(await claims('2026-11-24T21:59:00Z')).toBe(0); // 17:59 Guadeloupe
+    expect(await claims('2026-11-24T22:00:00Z')).toBe(1); // 18:00 Guadeloupe
+  });
+
+  it("Paris → Auckland : le résumé reçu à 6 h (heure d'Auckland) compte pour ce jour-là", async () => {
+    const a = member('Europe/Paris', 'a');
+    expect(await claims('2026-11-23T17:00:00Z')).toBe(1); // 18:00 Paris 23/11 = 06:00 Auckland 24/11
+    changeTimezone(tdb.db, a, 'Pacific/Auckland');
+    expect(await claims('2026-11-24T05:00:00Z')).toBe(0); // 18:00 Auckland 24/11: no second digest
+    expect(await claims('2026-11-25T05:00:00Z')).toBe(1); // 18:00 Auckland 25/11
+  });
+
+  it('Auckland → Honolulu : ni doublon le soir même, ni jour sauté le lendemain', async () => {
+    const a = member('Pacific/Auckland', 'a');
+    expect(await claims('2026-11-24T05:00:00Z')).toBe(1); // 18:00 Auckland 24/11 = 19:00 Honolulu 23/11
+    changeTimezone(tdb.db, a, 'Pacific/Honolulu');
+    expect(await claims('2026-11-24T06:00:00Z')).toBe(0); // 20:00 Honolulu 23/11: already served that day
+    expect(await claims('2026-11-25T04:00:00Z')).toBe(1); // 18:00 Honolulu 24/11: a day without digest
+  });
+
+  it('changement pendant un passage : la ligne lue avant le changement ne réclame pas le jour', async () => {
+    // Explicit windows: registering a subscription starts the window at the real clock.
+    const since = { lastDispatchAt: Date.parse('2026-11-22T17:00:00Z') / 1000, lastDispatchDate: '2026-11-22' };
+    member('Europe/Paris', 'a', since);
+    const b = member('Europe/Paris', 'b', since);
+    prime('2026-11-22');
+    addWine('W', [2020, 2026, 2030, 2040]); // at its peak in 2026: a's digest has something to send
+    const slow: PushSender = async (sub, payload, vapid) => {
+      if (sub.endpoint.endsWith('/a')) changeTimezone(tdb.db, b, 'Pacific/Auckland'); // while a is served
+      return sender(sub, payload, vapid);
+    };
+    expect(await tick('2026-11-23T17:00:00Z', slow)).toEqual({ processed: 1, sent: 1 });
+    // b's last digest (22/11 18:00 Paris) was on 23/11 at 06:00 in Auckland; its stale Paris row claimed nothing.
+    expect(userRow(b)).toMatchObject({ timezone: 'Pacific/Auckland', lastDispatchDate: '2026-11-23' });
+    expect(await claims('2026-11-24T05:00:00Z')).toBe(1); // 18:00 Auckland 24/11
   });
 });

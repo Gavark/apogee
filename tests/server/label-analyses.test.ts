@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { mkdtempSync, rmSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, rmSync, existsSync, mkdirSync, writeFileSync, readdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { eq } from 'drizzle-orm';
@@ -344,5 +344,42 @@ describe('loadWinePhoto (route photo)', () => {
 
     tdb.db.update(tdb.schema.wines).set({ labelPhoto: '../../etc/passwd' }).where(eq(tdb.schema.wines.id, w)).run();
     expect(loadWinePhoto(tdb.db, ctx, w, dir)).toBeNull();
+  });
+});
+
+describe('photos orphelines à la source', () => {
+  it("si l'enregistrement de l'analyse échoue, la photo écrite est effacée et l'erreur remonte", async () => {
+    tdb.sqlite.exec('DROP TABLE label_analyses');
+    await expect(analyzeAndStore(tdb.db, ctx, null, input())).rejects.toThrow();
+    expect(readdirSync(join(dir, String(hid)))).toEqual([]);
+  });
+
+  it("si l'enregistrement échoue avec la photo existante d'un vin, celle-ci n'est pas effacée", async () => {
+    const { path } = savePhoto(dir, hid, JPEG);
+    mkWine(ctx, 2015, path);
+    tdb.sqlite.exec('DROP TABLE label_analyses');
+    await expect(
+      analyzeAndStore(tdb.db, ctx, null, input({ photo: null, existingPhotoPath: path }))
+    ).rejects.toThrow();
+    expect(existsSync(join(dir, path))).toBe(true);
+  });
+
+  it('deleteWine vide photo_path des analyses qui pointaient vers la photo effacée', async () => {
+    const { path } = savePhoto(dir, hid, JPEG);
+    const w = mkWine(ctx, 2015, path);
+    await analyzeAndStore(tdb.db, ctx, fakeProvider(sampleAnalysis()), input({ photo: null, existingPhotoPath: path }));
+    expect(rows()[0].photoPath).toBe(path);
+    deleteWine(tdb.db, ctx, w, dir);
+    expect(rows()[0].photoPath).toBeNull();
+  });
+
+  it('deleteWine garde photo_path des analyses si un autre vin utilise encore la photo', async () => {
+    const { path } = savePhoto(dir, hid, JPEG);
+    const w1 = mkWine(ctx, 2015, path);
+    mkWine(ctx, 2016, path);
+    await analyzeAndStore(tdb.db, ctx, fakeProvider(sampleAnalysis()), input({ photo: null, existingPhotoPath: path }));
+    deleteWine(tdb.db, ctx, w1, dir);
+    expect(rows()[0].photoPath).toBe(path);
+    expect(existsSync(join(dir, path))).toBe(true);
   });
 });
