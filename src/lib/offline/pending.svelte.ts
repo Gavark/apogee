@@ -302,7 +302,11 @@ export async function retryQuarantined(userId: number, opId: string): Promise<vo
     if (!released) return; // gone meanwhile (sent or abandoned elsewhere)
     const out = await syncPending(userId);
     if (out.status === 'busy') {
-      // A sync already running may have listed the queue before the release: run another one after it.
+      // The release ran under the sync lock, so the sync holding it now started after the release
+      // and lists the up-to-date queue, released row included: wait for it, and sync once more.
+      // When that sync runs in another context (a tab, the service worker), syncIdle does not wait
+      // for it: the row may still be pending below, and when that context quarantines it again the
+      // generic toast « Un geste n'a pas pu être envoyé » stands in for « Toujours impossible à envoyer ».
       await syncIdle();
       await syncPending(userId);
     }

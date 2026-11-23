@@ -127,6 +127,8 @@ Une fois installée, l'application reste utilisable sans réseau.
 
 **Synchronisation** : les gestes en attente partent au retour du réseau, au retour sur l'application, toutes les 30 s et, selon le navigateur, par Background Sync. Chrome, Edge et Android les envoient même application fermée. Safari et iOS ne les envoient que lorsque l'application est ouverte.
 
+Un geste qui échoue plusieurs fois alors que le serveur répond est mis de côté et affiché sous « N geste(s) n'a/n'ont pas pu être envoyé(s) » ; les autres gestes continuent de partir. « Réessayer » le renvoie. « Abandonner » le supprime sans jamais l'envoyer : s'il avait déjà été pris en compte, corrigez le stock à la main.
+
 Quand un écran vient de la copie locale, un bandeau « Hors ligne » indique la date des données affichées. Un geste ne part jamais sous un autre compte que celui qui l'a fait. Si vous vous déconnectez avec des gestes non synchronisés, l'application vous prévient et vous propose de rester, ou de vous déconnecter quand même (les gestes sont alors perdus).
 
 ### Notifications
@@ -297,6 +299,8 @@ Once installed, the app keeps working without a network.
 **What needs the network**: adding or editing a wine, locations, account settings (password, sessions), household, notifications, AI label analysis and administration. These screens show "This screen needs a network connection" and disable sending while the device is offline.
 
 **Sync**: pending changes are sent when the network comes back, when you return to the app, every 30 s and, depending on the browser, through Background Sync. Chrome, Edge and Android send them even with the app closed. Safari and iOS only send them while the app is open.
+
+A change that keeps failing while the server answers is set aside and listed under "N change(s) could not be sent"; the other changes keep going. "Retry" sends it again. "Discard" deletes it without ever sending it: if it was already recorded, correct the stock by hand.
 
 When a screen comes from the local copy, an "Offline" banner shows the date of the data. A change is never sent under another account than the one that made it. If you sign out with unsynced changes, the app warns you and lets you stay, or sign out anyway (the changes are then lost).
 

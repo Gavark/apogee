@@ -9,7 +9,9 @@
   let { userId }: { userId: number } = $props();
 
   const items = $derived(quarantinedItems());
-  // opId of the row an action is running on, and of the row awaiting abandon confirmation.
+  // opId of the row an action is running on (every row's buttons wait for it: a click on another
+  // row, an abandon confirmation included, would otherwise be dropped without a word), and of the
+  // row awaiting abandon confirmation.
   let busy = $state<string | null>(null);
   let confirming = $state<string | null>(null);
 
@@ -46,8 +48,10 @@
 </script>
 
 {#if items.length > 0}
-  <section class="quarantine" role="status">
-    <h2>{m.quarantine_title({ count: items.length })}</h2>
+  <section class="quarantine">
+    <!-- Only the title is live: a status region around the buttons would be read again on every
+         change. On a span, so the h2 keeps its heading role. -->
+    <h2><span role="status">{m.quarantine_title({ count: items.length })}</span></h2>
     <ul>
       {#each items as item (item.row.op.opId)}
         {@const opId = item.row.op.opId}
@@ -58,10 +62,10 @@
             {#if item.held.length > 0}<span class="when">{m.quarantine_with_review()}</span>{/if}
           </p>
           <div class="actions">
-            <Button size="sm" variant="secondary" disabled={busy === opId} onclick={() => run(opId, retryQuarantined)}>
+            <Button size="sm" variant="secondary" disabled={busy !== null} onclick={() => run(opId, retryQuarantined)}>
               {m.quarantine_retry()}
             </Button>
-            <Button size="sm" variant="ghost" disabled={busy === opId} onclick={() => (confirming = opId)}>
+            <Button size="sm" variant="ghost" disabled={busy !== null} onclick={() => (confirming = opId)}>
               {m.quarantine_abandon()}
             </Button>
           </div>
