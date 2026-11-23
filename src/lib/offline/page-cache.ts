@@ -186,3 +186,58 @@ export async function clearPageCache(): Promise<void> {
   if (typeof caches === 'undefined') return;
   await caches.delete(PAGE_CACHE);
 }
+
+/** The most pages kept; past it the oldest go first (the cache would otherwise grow with every wine opened). */
+export const MAX_PAGE_ENTRIES = 120;
+/** When a copy was stored (Unix milliseconds): the Cache API keeps no date of its own. */
+export const STORED_AT_HEADER = 'x-apogee-stored-at';
+
+/** The given headers plus the time the copy is stored. */
+export function stampedHeaders(headers: HeadersInit, now: number): Headers {
+  const stamped = new Headers(headers);
+  stamped.set(STORED_AT_HEADER, String(now));
+  return stamped;
+}
+
+/** The installed app's start page (`/` redirects to it offline), and its data: never evicted. */
+function isProtected(url: string): boolean {
+  const { pathname, search } = new URL(url);
+  return search === '' && (pathname === '/app' || pathname === '/app/__data.json');
+}
+
+/**
+ * The URLs to delete, oldest first, to get back down to `max`. Equal times keep the input order,
+ * no time (null) counts as older than any. Protected entries count in the total but are never
+ * returned: if only they remain above `max`, it stops there.
+ */
+export function entriesToEvict(entries: { url: string; storedAt: number | null }[], max: number): string[] {
+  if (entries.length <= max) return [];
+  const oldestFirst = entries
+    .filter((e) => !isProtected(e.url))
+    .map((e, i) => ({ ...e, i }))
+    .sort((a, b) => (a.storedAt ?? -Infinity) - (b.storedAt ?? -Infinity) || a.i - b.i);
+  return oldestFirst.slice(0, entries.length - max).map((e) => e.url);
+}
+
+/** Reads a cache's storage times and deletes what entriesToEvict names. Best effort: never throws. */
+export async function trimPageCache(
+  cache: Pick<Cache, 'keys' | 'match' | 'delete'>,
+  max: number = MAX_PAGE_ENTRIES
+): Promise<void> {
+  try {
+    const requests = await cache.keys();
+    if (requests.length <= max) return;
+    const entries = await Promise.all(
+      requests.map(async (request) => {
+        const hit = await cache.match(request, { ignoreVary: true });
+        const raw = hit?.headers.get(STORED_AT_HEADER);
+        const n = raw === null || raw === undefined || raw.trim() === '' ? NaN : Number(raw);
+        return { url: request.url, storedAt: Number.isFinite(n) ? n : null };
+      })
+    );
+    const doomed = new Set(entriesToEvict(entries, max));
+    for (const request of requests) if (doomed.has(request.url)) await cache.delete(request);
+  } catch {
+    // keeping a few pages too many is harmless; failing to store the page is not
+  }
+}

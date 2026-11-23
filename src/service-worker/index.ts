@@ -14,7 +14,9 @@ import {
   isStorable,
   networkDeadlineFor,
   networkOrCopy,
-  offlineRedirectFor
+  offlineRedirectFor,
+  stampedHeaders,
+  trimPageCache
 } from '../lib/offline/page-cache';
 import { getActiveUser } from '../lib/offline/queue';
 import { syncNow } from '../lib/offline/sync';
@@ -137,13 +139,22 @@ async function store(url: URL, res: Response): Promise<void> {
   const cache = await caches.open(PAGE_CACHE);
   const key = pageKey(url);
   if (!isDataRequest(url)) {
-    if (res.headers.get('content-type')?.includes('text/html')) await cache.put(key, res);
+    if (res.headers.get('content-type')?.includes('text/html')) {
+      const stamped = new Response(res.body, {
+        status: res.status,
+        statusText: res.statusText,
+        headers: stampedHeaders(res.headers, Date.now())
+      });
+      await cache.put(key, stamped);
+      await trimPageCache(cache);
+    }
     return;
   }
   const previous = await cache.match(key, { ignoreVary: true });
   const body = dataBodyToStore(await res.text(), previous ? await previous.text() : null);
   if (body === null) return; // a redirect in disguise ({ type: 'redirect' }), an error or a stream
-  await cache.put(key, new Response(body, { headers: { 'content-type': 'application/json' } }));
+  await cache.put(key, new Response(body, { headers: stampedHeaders({ 'content-type': 'application/json' }, Date.now()) }));
+  await trimPageCache(cache);
 }
 
 async function fromCache(url: URL): Promise<Response | null> {
