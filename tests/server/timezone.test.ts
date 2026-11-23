@@ -1,5 +1,11 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
-import { resolveInstanceTimezone, DEFAULT_TIMEZONE } from '../../src/lib/server/timezone';
+import {
+  resolveInstanceTimezone,
+  DEFAULT_TIMEZONE,
+  canonicalTimeZone,
+  timeZoneOptions,
+  localClock
+} from '../../src/lib/server/timezone';
 import { makeTestDb } from '../helpers/db';
 import { setupFirstAdmin } from '../../src/routes/setup/_logic';
 import { bootstrapAdmin } from '../../src/lib/server/auth/bootstrap';
@@ -51,5 +57,56 @@ describe('fuseau des nouveaux comptes', () => {
     const a = makeTestDb();
     await setupFirstAdmin(a.db, { email: 'a@x.fr', password: 'motdepasse-long', householdName: 'F', locale: 'fr' });
     expect(tzOf(a, 'a@x.fr')).toBe('Europe/Paris');
+  });
+});
+
+describe('canonicalTimeZone', () => {
+  it('accepte une zone IANA connue', () => {
+    expect(canonicalTimeZone('America/Guadeloupe')).toBe('America/Guadeloupe');
+    expect(canonicalTimeZone('Europe/Paris')).toBe('Europe/Paris');
+    expect(canonicalTimeZone('UTC')).toBe('UTC');
+    expect(canonicalTimeZone('  Pacific/Auckland  ')).toBe('Pacific/Auckland');
+  });
+  it('rend le nom canonique (casse, alias)', () => {
+    expect(canonicalTimeZone('europe/paris')).toBe('Europe/Paris');
+    expect(canonicalTimeZone('Etc/UTC')).toBe('UTC');
+    // Alias: whatever name the runtime treats as canonical, it is one of the options.
+    const ids = timeZoneOptions().map((o) => o.id);
+    expect(ids).toContain(canonicalTimeZone('America/Montreal'));
+    expect(ids).toContain(canonicalTimeZone('Asia/Kolkata'));
+  });
+  it('rejette tout ce qui n’est pas une zone IANA', () => {
+    for (const z of [
+      undefined, null, 42, {}, '', '   ', 'Mars/Olympus', 'pas une zone', '+05:00', '-04:00', 'GMT+4',
+      ':/etc/localtime', 'Europe/Paris\u0000', 'A'.repeat(100)
+    ])
+      expect(canonicalTimeZone(z)).toBeNull();
+  });
+});
+
+describe('timeZoneOptions', () => {
+  it('liste triée, avec le décalage UTC actuel, et chaque option est valide', () => {
+    const opts = timeZoneOptions(new Date('2026-11-23T12:00:00Z'));
+    const ids = opts.map((o) => o.id);
+    expect(ids).toEqual([...ids].sort());
+    expect(ids).toContain('UTC');
+    expect(opts.find((o) => o.id === 'America/Guadeloupe')?.label).toBe('America/Guadeloupe (UTC−04:00)');
+    expect(opts.find((o) => o.id === 'Europe/Paris')?.label).toBe('Europe/Paris (UTC+01:00)');
+    const kathmandu = canonicalTimeZone('Asia/Kathmandu')!; // Asia/Katmandu on some ICU versions
+    expect(opts.find((o) => o.id === kathmandu)?.label).toBe(`${kathmandu} (UTC+05:45)`);
+    for (const o of opts) expect(canonicalTimeZone(o.id)).toBe(o.id);
+  });
+  it("suit l'heure d'été", () => {
+    expect(timeZoneOptions(new Date('2027-07-01T12:00:00Z')).find((o) => o.id === 'Europe/Paris')?.label).toBe(
+      'Europe/Paris (UTC+02:00)'
+    );
+  });
+});
+
+describe('localClock', () => {
+  it('date, mois et heure locaux', () => {
+    const ms = Date.parse('2026-12-31T23:30:00Z');
+    expect(localClock(ms, 'America/Guadeloupe')).toEqual({ date: '2026-12-31', month: '2026-12', hour: 19 });
+    expect(localClock(ms, 'Europe/Paris')).toEqual({ date: '2027-01-01', month: '2027-01', hour: 0 });
   });
 });

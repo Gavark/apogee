@@ -610,7 +610,7 @@
   "notif_pref_phases_hint": "A wine enters its drinking window, reaches its peak, becomes drink-soon or is past its prime.",
   "notif_pref_monthly": "Monthly reminder",
   "notif_pref_monthly_hint": "Each month, the bottles not to forget.",
-  "notif_schedule_hint": "At most one notification a day, around 6 pm (your account's time zone: {timezone}).",
+  "notif_schedule_hint": "At most one notification a day, around 6 pm, in your account's time zone ({timezone}).",
   "notif_saved": "Preferences saved.",
   "notif_this_device_title": "This device",
   "notif_btn_enable": "Enable notifications",
@@ -646,5 +646,14 @@
   "phase_hint_peak": "The best time to open it.",
   "phase_hint_ready": "Good to drink, and it may still improve.",
   "phase_hint_too_young": "Too young: it opens from the year shown.",
-  "phase_hint_unknown": "No window yet: enter one or ask the AI for an estimate."
+  "phase_hint_unknown": "No window yet: enter one or ask the AI for an estimate.",
+  "account_timezone_title": "Time zone",
+  "account_timezone_label": "Account time zone",
+  "account_timezone_hint": "Pick the one where you live: it sets the time of the daily digest (around 6 pm) and the day the year changes for drinking phases.",
+  "account_timezone_submit": "Save time zone",
+  "account_timezone_success": "Time zone saved: {timezone}.",
+  "account_timezone_invalid": "This time zone is unknown.",
+  "account_timezone_device": "This device is set to {timezone}.",
+  "account_timezone_use_device": "Use this time zone",
+  "notif_schedule_change": "Change time zone"
 }

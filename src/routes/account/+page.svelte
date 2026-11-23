@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { onMount } from 'svelte';
   import { enhance } from '$app/forms';
   import CaretRight from 'phosphor-svelte/lib/CaretRight';
   import SignOut from 'phosphor-svelte/lib/SignOut';
@@ -24,6 +25,16 @@
 
   let { data, form } = $props();
   const errors = $derived((form?.errors ?? {}) as Record<string, string | undefined>);
+
+  /** This browser's own zone, offered when it differs from the account's (e.g. after a move). */
+  let deviceZone = $state<string | null>(null);
+  onMount(() => {
+    try {
+      deviceZone = Intl.DateTimeFormat().resolvedOptions().timeZone || null;
+    } catch {
+      deviceZone = null;
+    }
+  });
 
   let logoutForm: HTMLFormElement | undefined = $state();
   /** Gestures still queued in this browser: logging out would lose them. */
@@ -140,6 +151,44 @@
     </Card>
   </section>
 
+  <section id="timezone">
+    <h2>{m.account_timezone_title()}</h2>
+    <Card>
+      {#if form?.timezoneSuccess}<p class="success" role="status">{form.timezoneSuccess}</p>{/if}
+      <form
+        method="POST"
+        action="?/setTimezone"
+        use:enhance={() => async ({ update }) => update({ reset: false })}
+        class="form"
+      >
+        <Field label={m.account_timezone_label()} hint={m.account_timezone_hint()} error={form?.timezoneError}>
+          {#snippet children(control)}
+            <select {...control} name="timezone" required>
+              {#each data.timezone.options as o (o.id)}
+                <option value={o.id} selected={o.id === data.timezone.current}>{o.label}</option>
+              {/each}
+            </select>
+          {/snippet}
+        </Field>
+        <Button type="submit" disabled={!network.online}>{m.account_timezone_submit()}</Button>
+      </form>
+      {#if deviceZone && deviceZone !== data.timezone.current}
+        <form
+          method="POST"
+          action="?/setTimezone"
+          use:enhance={() => async ({ update }) => update({ reset: false })}
+          class="device-zone"
+        >
+          <input type="hidden" name="timezone" value={deviceZone} />
+          <p class="muted">{m.account_timezone_device({ timezone: deviceZone })}</p>
+          <Button type="submit" variant="secondary" size="sm" disabled={!network.online}>
+            {m.account_timezone_use_device()}
+          </Button>
+        </form>
+      {/if}
+    </Card>
+  </section>
+
   <section>
     <h2>{m.account_password_title()}</h2>
     <Card>
@@ -224,6 +273,17 @@
   .form { display: grid; gap: var(--s-4); }
   .success { color: var(--c-link); font-weight: var(--fw-medium); }
   .sheet-actions { display: grid; gap: var(--s-3); }
+  .device-zone {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--s-2) var(--s-3);
+    margin-top: var(--s-4);
+    padding-top: var(--s-4);
+    border-top: 1px solid var(--c-border);
+  }
+  .device-zone p { margin: 0; font-size: var(--fs-sm); overflow-wrap: anywhere; }
 
   .nav-card {
     display: flex;
