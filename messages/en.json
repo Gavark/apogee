@@ -426,6 +426,24 @@
       }
     }
   ],
+  "home_filter_label": "Filter by phase",
+  "home_filter_all": "All",
+  "home_total_filtered": [
+    {
+      "declarations": [
+        "input count",
+        "input total",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} bottle of {total}",
+        "countPlural=*": "{count} bottles of {total}"
+      }
+    }
+  ],
   "home_until": "until {year}",
   "home_opens": "from {year}",
   "home_set_window": "Set the window",
