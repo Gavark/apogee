@@ -69,15 +69,18 @@ tar -xzf backups/apogee-photos-<TS>.tar.gz -C data   # recrée data/photos/ ; sa
 docker compose start apogee
 ```
 
-Sous Windows (PowerShell, à la racine du dépôt) ; `chown` est inutile avec Docker Desktop :
+Sous Windows (PowerShell, à la racine du dépôt) :
 
 ```powershell
 docker compose stop apogee
 Remove-Item data\apogee.sqlite-wal, data\apogee.sqlite-shm -ErrorAction SilentlyContinue
 Copy-Item backups\apogee-<TS>.sqlite data\apogee.sqlite -Force
 tar -xzf backups\apogee-photos-<TS>.tar.gz -C data   # sans archive, sautez cette ligne
+docker run --rm -v ${PWD}\data:/data alpine:3 chown -R 1000:1000 /data
 docker compose start apogee
 ```
+
+Ne sautez pas la ligne `chown`. Avec Docker Desktop, `Copy-Item` recopie aussi le propriétaire du fichier de sauvegarde, créé par root dans le conteneur `apogee-backup`. La base restaurée apparaît alors `root:root` en lecture seule pour l'application (uid 1000). Celle-ci s'arrête au démarrage avec `attempt to write a readonly database`.
 
 Supprimez toujours les fichiers `-wal` et `-shm` avant la copie : la base est en mode WAL, et un WAL résiduel rejoué sur le fichier restauré pourrait le corrompre ou mélanger d'anciennes données. Restaurez les photos pendant que le conteneur est arrêté ; si `data/photos/` contient déjà des fichiers, l'extraction les complète ou les remplace par ceux de la sauvegarde.
 
